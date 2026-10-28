@@ -38,7 +38,7 @@ class Inputs(TypedDict):
 @triton.jit
 def _swapab_gemm(x_ptr, w_ptr, lo_ptr, out_ptr, M, N, K, stride_xm, stride_wn, stride_om,
                  BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr, SPLIT_K: tl.constexpr,
-                 HAS_LO: tl.constexpr, OUT_BF16: tl.constexpr):
+                 HAS_LO: tl.constexpr, OUT_BF16: tl.constexpr, PARTIAL: tl.constexpr = False):
     pid_n = tl.program_id(0)
     pid_m = tl.program_id(1)
     pid_k = tl.program_id(2)
@@ -62,12 +62,25 @@ def _swapab_gemm(x_ptr, w_ptr, lo_ptr, out_ptr, M, N, K, stride_xm, stride_wn, s
             acc = tl.dot(lo, xt, acc)
     o_ptrs = out_ptr + offs_m[None, :] * stride_om + offs_n[:, None]
     o_mask = m_mask[None, :] & n_mask[:, None]
-    if SPLIT_K > 1:
+    if PARTIAL:  # split-K partials to [SPLIT_K, M, N] FP32 (no memset, no atomics); _reduce_splits sums
+        tl.store(o_ptrs + pid_k * M * stride_om, acc, mask=o_mask)
+    elif SPLIT_K > 1:
         tl.atomic_add(o_ptrs, acc, mask=o_mask, sem="relaxed")
     elif OUT_BF16:
         tl.store(o_ptrs, acc.to(out_ptr.dtype.element_ty), mask=o_mask)
     else:
         tl.store(o_ptrs, acc, mask=o_mask)
+
+
+@triton.jit
+def _reduce_splits(p_ptr, out_ptr, MN, SPLIT_K: tl.constexpr, BLOCK: tl.constexpr):
+    """out[i] = bf16(sum_s p[s, i]), FP32 sum in a fixed order (deterministic)."""
+    offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    mask = offs < MN
+    acc = tl.zeros((BLOCK,), dtype=tl.float32)
+    for sidx in tl.static_range(SPLIT_K):
+        acc += tl.load(p_ptr + sidx * MN + offs, mask=mask, other=0.0)
+    tl.store(out_ptr + offs, acc.to(out_ptr.dtype.element_ty), mask=mask)
 
 
 # (BN, BK, SPLIT_K, num_warps, num_stages) per layer, for m <= 32, picked per shape from H200
@@ -79,6 +92,18 @@ CONFIGS = {
     "unpooler_s": None,
     "unpooler": None,
     "router": (16, 256, 8, 4, 4),
+}
+# Sweep C (check only, exact m to learn 4 configs per layer in one run): split-K with FP32
+# partials + one reduce/cast kernel. (BN, BK, SPLIT_K, warps, stages)
+PARTIAL_SWEEP = {
+    ("qkv_gate", 1): (64, 128, 8, 4, 4), ("qkv_gate", 8): (64, 128, 16, 4, 4),
+    ("qkv_gate", 16): (32, 128, 8, 4, 4), ("qkv_gate", 32): (64, 128, 8, 8, 4),
+    ("pooler", 1): (64, 128, 4, 4, 4), ("pooler", 8): (64, 128, 8, 4, 4),
+    ("pooler", 16): (32, 128, 4, 4, 4), ("pooler", 32): (64, 128, 4, 8, 4),
+    ("unpooler_s", 1): (32, 128, 8, 4, 4), ("unpooler_s", 8): (32, 128, 16, 4, 4),
+    ("unpooler", 16): (64, 128, 2, 4, 4), ("unpooler", 32): (64, 128, 4, 4, 4),
+    ("o", 1): (64, 128, 2, 4, 4), ("o", 8): (64, 64, 4, 4, 4),
+    ("o", 16): (32, 128, 2, 4, 4), ("o", 32): (64, 128, 2, 8, 4),
 }
 # Above this m, cuBLAS (SGLang's path) wins on every layer so far.
 TRITON_MAX_M = 32
@@ -97,6 +122,7 @@ def prepare(weights):
     state["router_lo"] = lo.contiguous()
     state["router_hi_t"] = hi.t().contiguous()
     state["router_lo_t"] = lo.t().contiguous()
+    state["router_hilo_t"] = torch.cat([hi, lo], 0).t().contiguous()  # [K, 2N]: hi columns, then lo
     return state
 
 
@@ -120,9 +146,13 @@ def kernel_fn(data, state):
     cfg = data["config"]
     layer, n = cfg["layer"], cfg["n"]
     m, k = x.shape
+    if layer == "router" and m > TRITON_MAX_M:
+        return _router_stacked(x, state)
     if m > TRITON_MAX_M:
         return _baseline(x, layer, n, state)
     key = "unpooler_s" if (layer == "unpooler" and n == 1024) else layer
+    if (key, m) in PARTIAL_SWEEP:
+        return _partial(x, state[layer], n, *PARTIAL_SWEEP[(key, m)])
     if CONFIGS[key] is None:
         return _baseline(x, layer, n, state)
     bn, bk, split, warps, stages = CONFIGS[key]
@@ -143,3 +173,28 @@ def kernel_fn(data, state):
     if layer != "router" and split > 1:
         out = out.to(x.dtype)
     return out
+
+
+def _partial(x, w, n, bn, bk, split, warps, stages):
+    x = x.contiguous()
+    m, k = x.shape
+    bm = _bm(m)
+    part = torch.empty((split, m, n), device=x.device, dtype=torch.float32)
+    _swapab_gemm[(triton.cdiv(n, bn), triton.cdiv(m, bm), split)](
+        x, w, w, part, m, n, k, x.stride(0), w.stride(0), n, BM=bm, BN=bn, BK=bk, SPLIT_K=split,
+        HAS_LO=False, OUT_BF16=False, PARTIAL=True, num_warps=warps, num_stages=stages)
+    out = torch.empty((m, n), device=x.device, dtype=x.dtype)
+    _reduce_splits[(triton.cdiv(m * n, 1024),)](part, out, m * n, SPLIT_K=split, BLOCK=1024, num_warps=4)
+    return out
+
+
+def _router_stacked(x, state):
+    """Router above 32 tokens: SGLang's hi + lo pair as ONE cuBLAS GEMM against the stacked
+    [hi; lo] weights (FP32 out), then hi-part + lo-part: the same two FP32-accumulated products
+    and the same final FP32 add as SGLang's two torch.mm calls, in one GEMM launch."""
+    if x.device.type == "cpu":  # local CPU testing only
+        both = x.float() @ state["router_hilo_t"].float()
+    else:
+        both = torch.mm(x, state["router_hilo_t"], out_dtype=torch.float32)
+    n = both.shape[1] // 2
+    return both[:, :n] + both[:, n:]
