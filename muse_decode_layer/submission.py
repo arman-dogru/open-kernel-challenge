@@ -5,6 +5,7 @@ their own problems' H200 runs showed a win:
   attention       split-KV Triton decode kernel + combine fused with the per-head norm x gate
                   (muse_attention_decode), on the shapes in SPLITKV_ON; FA3 elsewhere
   o, pooler       swap-AB Triton GEMM up to 32 tokens (muse_bf16_proj); cuBLAS above
+  experts         SGLang's Marlin path, moe_block_size re-tuned at 128 / 256 tokens (muse_moe_w4a16)
   router          BF16 hi + lo Triton split-K GEMM for 9-32 tokens (SGLang runs the same hi/lo
                   split above 8 tokens, as two cuBLAS GEMMs); FP32 F.linear up to 8 as SGLang
 
@@ -375,8 +376,11 @@ def _swapab_gemm(x_ptr, w_ptr, lo_ptr, out_ptr, M, N, K, stride_xm, stride_wn, s
 # (BN, BK, SPLIT_K, warps, stages): muse_bf16_proj v3 configs
 PROJ_CFG = {"o": (64, 128, 1, 4, 4), "pooler": (32, 256, 1, 4, 4), "router": (16, 256, 8, 4, 4)}
 PROJ_MAX_TOKENS = 32
-# (layer kind, q_len, batch) where the split-KV kernel beat FA3 on muse_attention_decode
-SPLITKV_ON = {("sliding", 1, 1), ("sliding", 1, 16), ("sliding", 1, 32), ("sliding", 8, 16)}
+# Marlin moe_block_size per token count, measured on muse_moe_w4a16 (SGLang picks 48 / 64)
+MOE_BLOCK_M_OVERRIDE = {128: 16, 256: 32}
+# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages) where the split-KV kernel beat FA3
+# on muse_attention_decode (its ATTN_CFG); FA3 elsewhere
+SPLITKV_ON = {("sliding", 1, 1): ("head", 64, 4, 3), ("sliding", 1, 16): ("head", 64, 4, 3), ("sliding", 1, 32): ("head", 64, 4, 3), ("sliding", 8, 16): ("head", 64, 4, 3), ("full", 1, 1): ("rows", 64, 4, 3), ("full", 1, 16): ("head", 128, 4, 4), ("full", 1, 32): ("head", 128, 4, 4)}
 
 
 def _proj(x, w, layer, lo=None):
@@ -403,7 +407,7 @@ def _nsplit(cfg, batch, hkv, capacity):
     return 1 << (n.bit_length() - 1)
 
 
-def _splitkv_attention(data, q, qkv, cfg, gate):
+def _splitkv_attention(data, q, qkv, cfg, gate, which, block_n, warps, stages):
     """q [T, Hq*64] after norm/RoPE (cache already written) -> rmsnorm(attn) * sigmoid(gate), [T, Hq*64]."""
     batch, L = cfg["batch"], cfg["q_len"]
     hq, hkv, d = cfg["num_q_heads"], cfg["num_kv_heads"], cfg["head_dim"]
@@ -419,15 +423,16 @@ def _splitkv_attention(data, q, qkv, cfg, gate):
     args = (q, q.stride(0), data["k_cache"].view(torch.uint8), data["v_cache"].view(torch.uint8),
             data["page_table"], data["page_table"].stride(0), data["cache_seqlens"], data["k_scale"],
             data["v_scale"], o_part, lse, cfg["sm_scale"] * cfg["qk_scale_factor"], chunk, page)
-    if hkv * d <= 128 and not cfg["window"]:
+    if which == "rows":
         rows = max(16, triton.next_power_of_2(hq * L))
         _attn_split_rows[(nsplit, batch)](
-            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=64, D=d,
-            HW=True, num_warps=4 if rows <= 16 else 8, num_stages=3)
+            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=block_n, D=d,
+            HW=True, num_warps=warps, num_stages=stages)
     else:
         _attn_split[(hkv, nsplit, batch)](
             *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"],
-            BLOCK_M=max(16, triton.next_power_of_2(G * L)), BLOCK_N=64, D=d, HW=True, num_warps=4, num_stages=3)
+            BLOCK_M=max(16, triton.next_power_of_2(G * L)), BLOCK_N=block_n, D=d, HW=True, num_warps=warps,
+            num_stages=stages)
     out = torch.empty((T, hq * d), device=q.device, dtype=torch.bfloat16)
     _combine_norm_gate[(T, hq)](o_part, lse, gate, gate.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
                                 num_warps=1)
@@ -538,6 +543,7 @@ def _experts(x, topk_weights, topk_ids, state):
     for block_size_m in BLOCK_SIZE_M_CANDIDATES:
         if num_tokens * TOP_K / LOCAL_EXPERTS / block_size_m < 0.9:
             break
+    block_size_m = MOE_BLOCK_M_OVERRIDE.get(num_tokens, block_size_m)
     sorted_ids, block_experts, n_padded = moe_align_block_size(local_ids, block_size_m, N_EXPERTS)
     cache2 = torch.empty((num_tokens * TOP_K, size_n), device=x.device, dtype=x.dtype)
     cache13 = torch.empty((num_tokens * TOP_K * max(gemm1_n, size_k),), device=x.device, dtype=x.dtype)
@@ -586,7 +592,7 @@ def kernel_fn(data, state):
     window = cfg["window"]
     kind = "sliding" if window else "full"
     if (kind, length, batch) in SPLITKV_ON and hkv * d <= 128:
-        o = _splitkv_attention(data, q.reshape(tokens, hq * d), qkv, cfg, gate)
+        o = _splitkv_attention(data, q.reshape(tokens, hq * d), qkv, cfg, gate, *SPLITKV_ON[(kind, length, batch)])
     else:
         descale = {}
         if scaled:

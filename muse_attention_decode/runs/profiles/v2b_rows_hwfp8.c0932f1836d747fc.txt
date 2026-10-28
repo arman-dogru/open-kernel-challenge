@@ -1,0 +1,141 @@
+okc run c0932f1836d747fc on muse_attention_decode
+submission  /workspace/open-kernel-challenge/muse_attention_decode/runs/v2b_rows_hwfp8.py
+status      ok
+passed      true
+speedup     0.8171101279823104
+speedup_ci  [0.8048534760625757 0.8324708356848131]
+score_us    4609.293008397929
+tests       16/16 passed
+
+scored shapes (µs; speed of light is the reference's bound)
+case                                                         sglang      yours  speedup        sol  
+batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 1 page=1      20.59      16.66   1.236x       0.11  
+batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 1 page=1      31.58      28.68   1.101x       4.27  
+batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 16 page=1 spread=agentic      26.94      20.33   1.325x       1.65  
+batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 16 page=1 spread=agentic     200.66     207.38   0.968x      63.18  
+batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 32 page=1 spread=agentic      31.30      23.00   1.360x       3.29  
+batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 32 page=1 spread=agentic     385.09     397.25   0.969x     126.35  
+batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 1 page=1 q_len=8      22.77      22.61   1.007x       0.12  
+batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 1 page=1 q_len=8      35.94      50.41   0.713x       4.28  
+batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 16 page=1 q_len=8 spread=agentic      28.80      27.12   1.062x       1.86  
+batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 16 page=1 q_len=8 spread=agentic     205.30     448.30   0.458x      63.39  
+batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 32 page=1 q_len=8 spread=agentic      34.30      35.50   0.966x       3.72  
+batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 32 page=1 q_len=8 spread=agentic     390.61     903.20   0.432x     126.78  
+
+profile 0: batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 1 page=1
+kernel                                                           GPU time  share  calls
+_attn_split                                                        6.4 µs  56.0%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.8 µs  15.8%      2
+_combine_norm_gate                                                 1.2 µs  10.4%      1
+_qk_rms_norm_fwd_kernel                                            1.1 µs   9.3%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.0 µs   8.5%      1
+total                                                             11.4 µs
+
+profile 1: batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 1 page=1
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                  12.8 µs  53.0%      1
+_combine_norm_gate                                                 7.4 µs  30.8%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.9 µs   8.0%      2
+_qk_rms_norm_fwd_kernel                                            1.0 µs   4.2%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.0 µs   4.0%      1
+total                                                             24.1 µs
+
+profile 2: batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 16 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                        7.7 µs  55.2%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       1.8 µs  12.6%      1
+_combine_norm_gate                                                 1.2 µs   8.9%      1
+_qk_rms_norm_fwd_kernel                                            1.2 µs   8.7%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.1 µs   7.5%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   7.1%      1
+total                                                             14.0 µs
+
+profile 3: batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 16 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 197.2 µs  96.0%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       2.6 µs   1.3%      1
+_combine_norm_gate                                                 1.9 µs   0.9%      1
+_qk_rms_norm_fwd_kernel                                            1.6 µs   0.8%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.1 µs   0.5%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   0.5%      1
+total                                                            205.4 µs
+
+profile 4: batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 32 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       12.0 µs  63.6%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       1.9 µs   9.9%      1
+_qk_rms_norm_fwd_kernel                                            1.5 µs   8.0%      1
+_combine_norm_gate                                                 1.4 µs   7.7%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.1 µs   5.8%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   5.1%      1
+total                                                             18.8 µs
+
+profile 5: batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 32 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 388.0 µs  97.9%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       2.7 µs   0.7%      1
+_combine_norm_gate                                                 1.9 µs   0.5%      1
+_qk_rms_norm_fwd_kernel                                            1.5 µs   0.4%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.3 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   0.2%      1
+total                                                            396.4 µs
+
+profile 6: batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 1 page=1 q_len=8
+kernel                                                           GPU time  share  calls
+_attn_split                                                       10.6 µs  63.8%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       1.7 µs  10.2%      1
+_combine_norm_gate                                                 1.2 µs   7.5%      1
+_qk_rms_norm_fwd_kernel                                            1.2 µs   6.9%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   6.0%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       0.9 µs   5.6%      1
+total                                                             16.6 µs
+
+profile 7: batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 1 page=1 q_len=8
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                  32.4 µs  70.2%      1
+_combine_norm_gate                                                 8.2 µs  17.6%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       2.1 µs   4.6%      1
+_qk_rms_norm_fwd_kernel                                            1.5 µs   3.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   2.2%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       0.9 µs   2.0%      1
+total                                                             46.2 µs
+
+profile 8: batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 16 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       13.3 µs  61.5%      1
+_combine_norm_gate                                                 2.7 µs  12.3%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       1.8 µs   8.4%      1
+_qk_rms_norm_fwd_kernel                                            1.6 µs   7.5%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.2 µs   5.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.1 µs   4.9%      1
+total                                                             21.6 µs
+
+profile 9: batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 16 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 448.4 µs  97.7%      1
+_combine_norm_gate                                                 3.7 µs   0.8%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       2.8 µs   0.6%      1
+_qk_rms_norm_fwd_kernel                                            1.8 µs   0.4%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.2 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   0.2%      1
+total                                                            458.9 µs
+
+profile 10: batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 32 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       21.7 µs  66.9%      1
+_combine_norm_gate                                                 4.0 µs  12.3%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       2.3 µs   7.1%      1
+_qk_rms_norm_fwd_kernel                                            2.2 µs   6.9%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.1 µs   3.4%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.1 µs   3.3%      1
+total                                                             32.5 µs
+
+profile 11: batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 32 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 891.0 µs  98.6%      1
+_combine_norm_gate                                                 4.9 µs   0.5%      1
+void at::native::elementwise_kernel<128, 4, at::native::g...       3.0 µs   0.3%      1
+_qk_rms_norm_fwd_kernel                                            2.0 µs   0.2%      1
+void sglang::store_kvcache_kernel<128l, 128l, 32u, true, ...       1.2 µs   0.1%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.1 µs   0.1%      1
+total                                                            903.3 µs

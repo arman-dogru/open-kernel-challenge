@@ -41,7 +41,7 @@ ours = '''
 # (BN, BK, SPLIT_K, warps, stages): muse_bf16_proj v3 configs
 PROJ_CFG = {"o": (64, 128, 1, 4, 4), "pooler": (32, 256, 1, 4, 4), "router": (16, 256, 8, 4, 4)}
 PROJ_MAX_TOKENS = 32
-# (layer kind, q_len, batch) where the split-KV kernel beat FA3 on muse_attention_decode
+# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages) where the split-KV kernel beat FA3\n# on muse_attention_decode (its ATTN_CFG); FA3 elsewhere
 SPLITKV_ON = SPLITKV_ON_PLACEHOLDER
 
 
@@ -69,7 +69,7 @@ def _nsplit(cfg, batch, hkv, capacity):
     return 1 << (n.bit_length() - 1)
 
 
-def _splitkv_attention(data, q, qkv, cfg, gate):
+def _splitkv_attention(data, q, qkv, cfg, gate, which, block_n, warps, stages):
     """q [T, Hq*64] after norm/RoPE (cache already written) -> rmsnorm(attn) * sigmoid(gate), [T, Hq*64]."""
     batch, L = cfg["batch"], cfg["q_len"]
     hq, hkv, d = cfg["num_q_heads"], cfg["num_kv_heads"], cfg["head_dim"]
@@ -85,15 +85,16 @@ def _splitkv_attention(data, q, qkv, cfg, gate):
     args = (q, q.stride(0), data["k_cache"].view(torch.uint8), data["v_cache"].view(torch.uint8),
             data["page_table"], data["page_table"].stride(0), data["cache_seqlens"], data["k_scale"],
             data["v_scale"], o_part, lse, cfg["sm_scale"] * cfg["qk_scale_factor"], chunk, page)
-    if hkv * d <= 128 and not cfg["window"]:
+    if which == "rows":
         rows = max(16, triton.next_power_of_2(hq * L))
         _attn_split_rows[(nsplit, batch)](
-            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=64, D=d,
-            HW=True, num_warps=4 if rows <= 16 else 8, num_stages=3)
+            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=block_n, D=d,
+            HW=True, num_warps=warps, num_stages=stages)
     else:
         _attn_split[(hkv, nsplit, batch)](
             *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"],
-            BLOCK_M=max(16, triton.next_power_of_2(G * L)), BLOCK_N=64, D=d, HW=True, num_warps=4, num_stages=3)
+            BLOCK_M=max(16, triton.next_power_of_2(G * L)), BLOCK_N=block_n, D=d, HW=True, num_warps=warps,
+            num_stages=stages)
     out = torch.empty((T, hq * d), device=q.device, dtype=torch.bfloat16)
     _combine_norm_gate[(T, hq)](o_part, lse, gate, gate.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
                                 num_warps=1)
@@ -113,7 +114,7 @@ old_attn = body[body.index("    window = cfg[\"window\"]\n    descale = {}"):bod
 new_attn = '''    window = cfg["window"]
     kind = "sliding" if window else "full"
     if (kind, length, batch) in SPLITKV_ON and hkv * d <= 128:
-        o = _splitkv_attention(data, q.reshape(tokens, hq * d), qkv, cfg, gate)
+        o = _splitkv_attention(data, q.reshape(tokens, hq * d), qkv, cfg, gate, *SPLITKV_ON[(kind, length, batch)])
     else:
 ''' + "\n".join(("    " + l) if l.strip() else l for l in old_attn.split("\n")[1:]) 
 body = body.replace(old_attn, new_attn.rstrip(" ") , 1)
@@ -130,6 +131,13 @@ body = body.replace('''        if split_router:
             logits = _proj(ffn_input, state["router_hi"], "router", lo=state["router_lo"])
         elif split_router:
             logits = torch.mm(ffn_input, state["router_hi_t"], out_dtype=torch.float32)''', 1)
+# Marlin moe_block_size re-tuned per token count (muse_moe_w4a16 v5/v6 check runs)
+body = body.replace("    sorted_ids, block_experts, n_padded = moe_align_block_size(local_ids, block_size_m, N_EXPERTS)",
+                    "    block_size_m = MOE_BLOCK_M_OVERRIDE.get(num_tokens, block_size_m)\n"
+                    "    sorted_ids, block_experts, n_padded = moe_align_block_size(local_ids, block_size_m, N_EXPERTS)", 1)
+body = body.replace("PROJ_MAX_TOKENS = 32\n", "PROJ_MAX_TOKENS = 32\n# Marlin moe_block_size per token count, measured on muse_moe_w4a16 (SGLang picks 48 / 64)\n"
+                    "MOE_BLOCK_M_OVERRIDE = {128: 16, 256: 32}\n", 1)
+body = body.replace("  router          BF16 hi + lo", "  experts         SGLang's Marlin path, moe_block_size re-tuned at 128 / 256 tokens (muse_moe_w4a16)\n  router          BF16 hi + lo", 1)
 import sys
 on = sys.argv[1] if len(sys.argv) > 1 else "set()"
 body = body.replace("SPLITKV_ON_PLACEHOLDER", on)

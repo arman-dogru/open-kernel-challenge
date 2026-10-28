@@ -3,7 +3,8 @@
 cache, and a combine kernel that also applies the per-head RMSNorm and sigmoid gate.
 
 Kept from SGLang: FusedQKNorm (QK-norm + interleaved RoPE) and store_cache (FP8 cache write).
-Replaced: the query cast, FA3 and rms_norm_gate.
+Replaced, on the shapes in ATTN_CFG: the query cast, FA3 and rms_norm_gate. Other scored shapes
+keep SGLang's FA3 path (where it is still faster).
 
 - Attention runs over every key it should (whole window / whole context, causal inside the
   verify block); no skipping. Queries stay BF16 (finer than FA3's E4M3), K/V are read as FP8
@@ -304,6 +305,48 @@ def _nsplit(cfg, batch, hkv, capacity):
     return 1 << (n.bit_length() - 1)  # power of two (the combine's tl.arange)
 
 
+# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages); missing = SGLang's FA3 path.
+# "head": one KV head per program; "rows": both KV heads per program (whole cache rows).
+# Each entry beat FA3 on its shape in H200 check runs (v1b, v2b, v3, v4).
+ATTN_CFG = {
+    ("sliding", 1, 1): ("head", 64, 4, 3),
+    ("sliding", 1, 16): ("head", 64, 4, 3),
+    ("sliding", 1, 32): ("head", 64, 4, 3),
+    ("sliding", 8, 16): ("head", 64, 4, 3),
+    ("full", 1, 1): ("rows", 64, 4, 3),
+    ("full", 1, 16): ("head", 128, 4, 4),
+    ("full", 1, 32): ("head", 128, 4, 4),
+}
+# Shapes not in the scored table (the tests) use the split-KV kernel with these defaults.
+SCORED_BATCHES = (1, 16, 32)
+
+
+def _fa3(data, q, qkv, cfg):
+    """SGLang's path after norm/RoPE/cache store (as baseline.py): q to E4M3, FA3, rms_norm_gate."""
+    from sgl_kernel.flash_attn import flash_attn_with_kvcache
+    from sglang.kernels.ops.muse_spark_v12.norm_gate import rms_norm_gate
+    batch, length = cfg["batch"], cfg["q_len"]
+    hq, hkv, d = cfg["num_q_heads"], cfg["num_kv_heads"], cfg["head_dim"]
+    tokens = batch * length
+    window = cfg["window"]
+    descale = {}
+    if cfg["kv_scale"] != 1.0:
+        descale = dict(k_descale=data["k_scale"].reshape(1, 1).expand(batch, hkv),
+                       v_descale=data["v_scale"].reshape(1, 1).expand(batch, hkv))
+    out = flash_attn_with_kvcache(
+        q=q.view(tokens, hq, d).to(FP8), k_cache=data["k_cache"], v_cache=data["v_cache"],
+        page_table=data["page_table"], cache_seqlens=data["cache_seqlens"], cu_seqlens_q=data["cu_seqlens_q"],
+        max_seqlen_q=length, softmax_scale=cfg["sm_scale"] * cfg["qk_scale_factor"], causal=True,
+        window_size=(window - 1, 0) if window else (-1, -1), scheduler_metadata=data["scheduler_metadata"],
+        **descale)
+    if isinstance(out, tuple):
+        out = out[0]
+    gate = qkv[:, (hq + 2 * hkv) * d:]
+    o = rms_norm_gate(out.reshape(tokens, hq * d).to(torch.bfloat16), gate, None, head_dim=d, eps=RMS_EPS,
+                      has_norm=True)
+    return o.view(batch, length, hq * d)
+
+
 def kernel_fn(data):
     cfg = data["config"]
     batch, L = cfg["batch"], cfg["q_len"]
@@ -313,6 +356,19 @@ def kernel_fn(data):
     q = _norm_rope_store(data, qkv, cfg)
     if q.device.type == "cpu":
         q = q.float()  # the Triton interpreter has no bf16
+    kind = "sliding" if cfg["window"] else "full"
+    key = (kind, L, batch)
+    if key in ATTN_CFG:
+        which, block_n, warps, stages = ATTN_CFG[key]
+    elif batch in SCORED_BATCHES or q.device.type == "cpu":
+        which, block_n, warps, stages = ("head", 64, 4, 3) if q.device.type == "cpu" else (None, 0, 0, 0)
+    else:
+        which, block_n, warps, stages = ("rows" if (hkv * d <= 128 and not cfg["window"] and L == 1) else "head",
+                                         64, 4, 3)
+    if which is None:
+        return _fa3(data, q, qkv, cfg)
+    if which == "rows" and hkv * d > 128:
+        which = "head"
     G = hq // hkv
     page = cfg["page_size"]
     capacity = data["page_table"].shape[1] * page
@@ -327,15 +383,15 @@ def kernel_fn(data):
     vc = data["v_cache"].view(torch.uint8)
     args = (q, q.stride(0), kc, vc, data["page_table"], data["page_table"].stride(0), data["cache_seqlens"],
             data["k_scale"], data["v_scale"], o_part, lse, cfg["sm_scale"] * cfg["qk_scale_factor"], chunk, page)
-    if hkv * d <= 128 and not cfg["window"]:
+    if which == "rows":
         rows = max(16, triton.next_power_of_2(hq * L))
         _attn_split_rows[(nsplit, batch)](
-            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=64, D=d,
-            HW=hw, num_warps=4 if rows <= 16 else 8, num_stages=3)
+            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=block_n, D=d,
+            HW=hw, num_warps=warps, num_stages=stages)
     else:
         _attn_split[(hkv, nsplit, batch)](
-            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=block_m, BLOCK_N=64, D=d,
-            HW=hw, num_warps=4, num_stages=3)
+            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=block_m, BLOCK_N=block_n, D=d,
+            HW=hw, num_warps=warps, num_stages=stages)
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
     _combine_norm_gate[(T, hq)](o_part, lse, gate, qkv.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
