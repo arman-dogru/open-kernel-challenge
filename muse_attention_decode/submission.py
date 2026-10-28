@@ -220,17 +220,19 @@ def _attn_split_rows(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_
 
 @triton.jit
 def _combine_norm_gate(o_ptr, lse_ptr, gate_ptr, stride_gt, out_ptr, eps,
-                       HQ: tl.constexpr, NSPLIT: tl.constexpr, D: tl.constexpr):
-    """Merge the splits of one (token, head), then RMSNorm over the head x sigmoid(gate)."""
+                       HQ: tl.constexpr, NSPLIT: tl.constexpr, D: tl.constexpr, NSPLIT_P2: tl.constexpr):
+    """Merge the splits of one (token, head), then RMSNorm over the head x sigmoid(gate).
+    NSPLIT need not be a power of two: NSPLIT_P2 = next power of two, extra lanes masked."""
     t = tl.program_id(0)
     hh = tl.program_id(1)
-    sp = tl.arange(0, NSPLIT)
+    sp = tl.arange(0, NSPLIT_P2)
+    spm = sp < NSPLIT
     d = tl.arange(0, D)
     idx = (t * HQ + hh) * NSPLIT + sp
-    lse = tl.load(lse_ptr + idx)
+    lse = tl.load(lse_ptr + idx, mask=spm, other=float("-inf"))
     mx = tl.max(lse, 0)
     w = tl.where(lse == float("-inf"), 0.0, tl.exp2(lse - mx))
-    o = tl.load(o_ptr + idx[:, None] * D + d[None, :])
+    o = tl.load(o_ptr + idx[:, None] * D + d[None, :], mask=spm[:, None], other=0.0)
     a = tl.sum(o * w[:, None], 0) / tl.sum(w, 0)
     r = a * tl.rsqrt(tl.sum(a * a, 0) / D + eps)
     g = tl.load(gate_ptr + t * stride_gt + hh * D + d).to(tl.float32)
@@ -308,8 +310,9 @@ def _nsplit(cfg, batch, progs_per_split, capacity, occ=4):
     span = (cfg["window"] + cfg["q_len"] - 1) if cfg["window"] else capacity
     want = max(1, (132 * occ) // (batch * progs_per_split))
     by_len = max(1, span // 256)
-    n = min(want, by_len, 256)
-    return 1 << (n.bit_length() - 1)  # power of two (the combine's tl.arange)
+    # No power-of-two rounding (audit r2 m5: flooring left batch 17 at ~8 programs/SM); the
+    # combine masks up to the next power of two.
+    return min(want, by_len, 256)
 
 
 # Path by regime (layer kind, q_len, batch range), never by exact scored batch size, so nearby
@@ -402,6 +405,6 @@ def kernel_fn(data):
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
     # one warp per (token, head) is latency-bound once it has >= 64 partials to read (7 us at 256)
-    _combine_norm_gate[(T, hq)](o_part, lse, gate, qkv.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
+    _combine_norm_gate[(T, hq)](o_part, lse, gate, qkv.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d, NSPLIT_P2=triton.next_power_of_2(nsplit),
                                 num_warps=4 if nsplit >= 64 else 1)
     return out.view(batch, L, hq * d)
