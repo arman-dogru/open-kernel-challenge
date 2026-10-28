@@ -3,8 +3,9 @@
 cache, and a combine kernel that also applies the per-head RMSNorm and sigmoid gate.
 
 Kept from SGLang: FusedQKNorm (QK-norm + interleaved RoPE) and store_cache (FP8 cache write).
-Replaced, on the shapes in ATTN_CFG: the query cast, FA3 and rms_norm_gate. Other scored shapes
-keep SGLang's FA3 path (where it is still faster).
+Replaced on decode steps (q_len 1, see _attn_path; chosen by regime, not by exact batch size):
+the query cast, FA3 and rms_norm_gate. Verify blocks (q_len 8) and untuned head layouts keep
+SGLang's FA3 path at every batch size.
 
 - Attention runs over every key it should (whole window / whole context, causal inside the
   verify block); no skipping. Queries stay BF16 (finer than FA3's E4M3), K/V are read as FP8
@@ -311,24 +312,26 @@ def _nsplit(cfg, batch, progs_per_split, capacity, occ=4):
     return 1 << (n.bit_length() - 1)  # power of two (the combine's tl.arange)
 
 
-# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages[, programs per SM, hoist V load]);
-# missing = SGLang's FA3 path.
-# "head": one KV head per program; "rows": both KV heads per program (whole cache rows).
-# Each entry beat FA3 on its shape in H200 check runs (v1b, v2b, v3, v4).
-ATTN_CFG = {
-    ("sliding", 1, 1): ("head", 64, 4, 3),
-    ("sliding", 1, 16): ("head", 64, 4, 3),
-    ("sliding", 1, 32): ("head", 64, 4, 3),
-    ("sliding", 8, 16): ("head", 64, 4, 3),
-    ("full", 1, 1): ("rows", 64, 4, 3),
-    # sweep A (check only): occupancy x V-load hoist x kernel on the four long full-layer shapes
-    ("full", 1, 16): ("rows", 64, 4, 3, 16, True),
-    ("full", 1, 32): ("head", 128, 4, 4, 16, True),
-    ("full", 8, 16): ("head", 64, 4, 3, 16, True),
-    ("full", 8, 32): ("rows", 64, 8, 3, 16, True),
-}
-# Shapes not in the scored table (the tests) use the split-KV kernel with these defaults.
-SCORED_BATCHES = (1, 16, 32)
+# Path by regime (layer kind, q_len, batch range), never by exact scored batch size, so nearby
+# shapes take the same path as the scored ones (H200 evidence: check runs v1b..v8, see STATUS.md):
+#   sliding decode (q_len 1), any batch      split-KV "head" kernel: 1.25-1.35x FA3 at b 1/16/32
+#   full decode, batch 1                     split-KV "rows", ~4 programs/SM (256 splits): ~1.1x
+#   full decode, batch >= 2                  "rows", ~16 programs/SM, V load hoisted: 1.17-1.26x
+#                                            at b 16/32 (the 4/SM "head" config was 0.92x there)
+#   any verify block (q_len 8)               SGLang's FA3: our 64-128-row blocks lose to it
+#                                            on full layers (0.35-0.8x) and only tie or win by
+#                                            <8% on sliding ones, so FA3 is kept at every batch
+# Value: (kernel, BLOCK_N, warps, stages, programs per SM, hoist V load); None = FA3.
+def _attn_path(kind, L, batch, hkv, d):
+    if L != 1:
+        return None
+    if kind == "sliding":
+        return ("head", 64, 4, 3, 4, False)
+    if hkv * d > 128:  # other head layouts (e.g. "dp"): not tuned, keep FA3
+        return None
+    if batch == 1:
+        return ("rows", 64, 4, 3, 4, False)
+    return ("rows", 64, 4, 3, 16, True)
 
 
 def _fa3(data, q, qkv, cfg):
@@ -367,21 +370,12 @@ def kernel_fn(data):
     if q.device.type == "cpu":
         q = q.float()  # the Triton interpreter has no bf16
     kind = "sliding" if cfg["window"] else "full"
-    key = (kind, L, batch)
-    occ, hoist = 4, False
-    if key in ATTN_CFG:
-        which, block_n, warps, stages, *extra = ATTN_CFG[key]
-        if extra:
-            occ, hoist = extra
-    elif batch in SCORED_BATCHES or q.device.type == "cpu":
-        which, block_n, warps, stages = ("head", 64, 4, 3) if q.device.type == "cpu" else (None, 0, 0, 0)
-    else:
-        which, block_n, warps, stages = ("rows" if (hkv * d <= 128 and not cfg["window"] and L == 1) else "head",
-                                         64, 4, 3)
-    if which is None:
+    path = _attn_path(kind, L, batch, hkv, d)
+    if path is None and q.device.type == "cpu":
+        path = ("head", 64, 4, 3, 4, False)  # local CPU tests exercise the split-KV kernel everywhere
+    if path is None:
         return _fa3(data, q, qkv, cfg)
-    if which == "rows" and hkv * d > 128:
-        which = "head"
+    which, block_n, warps, stages, occ, hoist = path
     G = hq // hkv
     page = cfg["page_size"]
     capacity = data["page_table"].shape[1] * page
@@ -407,6 +401,7 @@ def kernel_fn(data):
             HW=hw, HOIST=hoist, num_warps=warps, num_stages=stages)
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
+    # one warp per (token, head) is latency-bound once it has >= 64 partials to read (7 us at 256)
     _combine_norm_gate[(T, hq)](o_part, lse, gate, qkv.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
-                                num_warps=1)
+                                num_warps=4 if nsplit >= 64 else 1)
     return out.view(batch, L, hq * d)
