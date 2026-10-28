@@ -69,6 +69,8 @@ BLOCK_SIZE_M_CANDIDATES = (8, 16, 32, 48, 64)
 POST_NORM_EPS = 1e-8
 # Token count -> Marlin moe_block_size, measured best (SGLang's heuristic picks 48 and 64 here).
 BLOCK_M_OVERRIDE = {128: 16, 256: 32}
+# Sweep D (check only): the down GEMM's own moe_block_size (its own alignment), per token count
+BLOCK_M2_SWEEP = {1: 16, 8: 16, 16: 32, 32: 32, 128: 32, 256: 64}
 
 
 def _marlin_layer(weights, start, count):
@@ -155,6 +157,11 @@ def kernel_fn(data, state):
         sorted_ids, block_experts, n_padded, topk_weights, top_k=TOP_K,
         size_m=num_tokens, size_n=gemm1_n, size_k=size_k, **common)
     silu_and_mul(cache1.view(-1, gemm1_n), cache2, expert_ids=local_ids.view(-1), expert_step=1)
+    bsm2 = BLOCK_M2_SWEEP.get(num_tokens, block_size_m)
+    if bsm2 != block_size_m:
+        sorted_ids, block_experts, n_padded = moe_align_block_size(
+            local_ids, bsm2, N_EXPERTS if expert_map is not None else bank["count"])
+        common["moe_block_size"] = bsm2
     y = moe_wna16_marlin_gemm(
         cache2, cache3, bank["w2"], None, bank["w2_s"], bank["w2_gs"], None, None, None, ws,
         sorted_ids, block_experts, n_padded, topk_weights, top_k=1,
