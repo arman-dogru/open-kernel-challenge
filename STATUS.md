@@ -71,9 +71,9 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
 
 ## Job ledger (every okc job; times ET; sha256 = first 16 hex of the runs/ file as committed)
 
-Caveat (audit m2): files before this ledger were not hashed at send time; `04269b7477f74417`'s
-runs/v4_postnorm_fused.py was rewritten 5 s after that check finished (docstring only, by a script);
-the board job `9cb6d6a409ff4cd6` was sent after that rewrite, so it matches the committed bytes.
+Caveat (audit m2): files before the ledger existed were not hashed at send time; `04269b7477f74417`'s
+runs/v4_postnorm_fused.py got a docstring-only edit after that check ran; board job `9cb6d6a409ff4cd6`
+was sent after the edit, so it matches the committed bytes. From c89f5f5 on, every file is committed before it is sent.
 
 | time | job | problem | kind | file | sha256[:16] | status | time |
 |---|---|---|---|---|---|---|---|
@@ -116,3 +116,11 @@ the board job `9cb6d6a409ff4cd6` was sent after that rewrite, so it matches the 
 | Oct 28 15:57 | 172c76d646474db3 | muse_attention_decode | check | v6_sweepA.py | b462594b4779df8e | passed | 3,948.0 µs |
 | Oct 28 16:03 | fd78956d0ecb409f | muse_attention_decode | check | v7_sweepB.py | 958a3e81852bc4c6 | passed | 4,007.0 µs |
 | Oct 28 16:09 | bb656112f11e4320 | muse_attention_decode | check | v8_rows_occ.py | 193256efe4e05761 | passed | 3,355.1 µs |
+| Oct 28 17:59 | 3795339b0fd94eed | muse_attention_decode | check | v9_regime.py | 3646405dcccf3ac6 | passed | 3,356.8 µs |
+| Oct 28 17:59 | e9402d661a8b42b8 | muse_decode_layer | check | v6_attn_regime.py | a297541a0f65e8c6 | passed | 19.01 ms |
+| Oct 28 18:01 | af0211f6c18e43eb | muse_decode_layer | SUBMIT | (profile not saved yet) | — | passed | 18.83 ms |
+| Oct 28 18:01 | c3f668686d154849 | muse_bf16_proj | check | v5_sweepC.py | 745ff209e93e29a2 | passed | 5,112.8 µs |
+| Oct 28 18:05 | 50ace93cf34f4af0 | muse_moe_w4a16 | check | (profile not saved yet) | — | running |  |
+| Oct 28 18:05 | e042f303d1fc449c | muse_bf16_proj | check | v6_router_stacked.py | 53c5c18702e1cb65 | passed | 4,280.7 µs |
+| Oct 28 18:05 | fd13316e3a7f458b | muse_attention_decode | SUBMIT | (profile not saved yet) | — | running |  |
+| Oct 28 18:06 | f0bd99103bf74d83 | muse_bf16_proj | SUBMIT | (profile not saved yet) | — | running |  |
