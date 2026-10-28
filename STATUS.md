@@ -1,7 +1,7 @@
 # STATUS — updated Oct 28 2026, ~4:40 PM ET
 
-**ON HOLD: no `okc check` / `okc submit` until Arman re-runs `okc login` himself** (AGENTS.md: a person
-must accept the rules; it was run on his behalf on the agent box). Local CPU tests + compile_sm90 only.
+**Rules acceptance: 2026-10-28 ~6 PM ET, rules re-accepted by Arman personally via `okc login` (on his own
+Mac); the box's earlier agent-accepted session was logged out and revoked. Submits from here use his token.**
 
 Board (all provisional until the organisers' post-contest reruns):
 - **Overall kernel board: rank 893 / ~2313** (was 1016 at 4:05 PM ET) (top-50 = serving priority; top-1000 = Meta interview pool).
@@ -33,7 +33,7 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
   offline sm_90 compile (`tools/compile_sm90.py`) cover logic and compile errors without spending GPU hours.
   Reserve Kaggle for a future CUDA `load_inline` kernel that needs a real nvcc+GPU correctness run.
 
-## Ready to send once the hold lifts (not yet run; committed before any send)
+## Queued (committed before any send)
 - `muse_attention_decode/runs/v9_regime.py`: Peer Review M1 fix. Paths chosen by regime, not exact batch:
   sliding decode → split-KV head; full decode b=1 → rows 4/SM; full decode b≥2 → rows 16/SM + V-load
   hoist; every verify block and untuned head layouts → FA3. Same kernels as check bb656112f11e4320
@@ -45,7 +45,7 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
 
 ## Audit r1 follow-ups
 - M1 (attention exact-batch routing): fixed in v9_regime (above); decode_layer v6 also by regime.
-- M2 (who ran `okc login`): Arman to re-run it himself; all runs held until then.
+- M2 (who ran `okc login`): resolved — Arman re-accepted personally ~6 PM ET Oct 28; box session revoked.
 - m1: job ledger below; m2/m3: new rule — every runs/ file is committed before it is sent and never
   edited after (new vN name instead); `LICENSE` (Apache-2.0) added.
 
