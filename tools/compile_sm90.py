@@ -25,9 +25,12 @@ def attn(S):
          "qk_scale": "fp32", "chunk": "i32", "PAGE": "i32"}
     for L in (1, 8):
         for W in (0, 2048):
-            build(S._attn_split, t, dict(L=L, G=8, HKV=2, NSPLIT=8, WINDOW=W, BLOCK_M=max(16, 8 * L), BLOCK_N=64, D=64, HW=True))
-        build(S._attn_split_rows, t, dict(L=L, G=8, HKV=2, NSPLIT=8, WINDOW=0, BLOCK_M=16 * L, BLOCK_N=64, D=64, HW=True),
-              warps=4 if L == 1 else 8)
+            build(S._attn_split, t, dict(L=L, G=8, HKV=2, NSPLIT=8, WINDOW=W, BLOCK_M=max(16, 8 * L), BLOCK_N=64, D=64, HW=True, HOIST=False))
+        for hoist in (False, True):
+            build(S._attn_split, t, dict(L=L, G=8, HKV=2, NSPLIT=64, WINDOW=0, BLOCK_M=max(16, 8 * L), BLOCK_N=128,
+                                         D=64, HW=True, HOIST=hoist), stages=4)
+            build(S._attn_split_rows, t, dict(L=L, G=8, HKV=2, NSPLIT=8, WINDOW=0, BLOCK_M=16 * L, BLOCK_N=64, D=64,
+                                              HW=True, HOIST=hoist), warps=4 if L == 1 else 8)
     build(S._combine_norm_gate, {"o_ptr": "*fp32", "lse_ptr": "*fp32", "gate_ptr": "*bf16", "stride_gt": "i32",
                                  "out_ptr": "*bf16", "eps": "fp32"}, dict(HQ=16, NSPLIT=8, D=64), warps=1)
 

@@ -1,7 +1,11 @@
 # okc: problem=muse_moe_w4a16
 """SGLang's Marlin path with Marlin's moe_block_size re-tuned per token count on H200 (check runs
 v5/v6): smaller blocks at 128 and 256 tokens, where the busiest GPU's experts get ~4-8 tokens
-each and SGLang's heuristic over-pads. Otherwise identical to baseline.py.
+each and SGLang's heuristic over-pads.
+Below 32 tokens SGLang's fused_post_expert_norm_weighted_sum falls back to ~10 PyTorch kernels
+(where / float / mul / pow / mean / rsqrt / mul / sum / cast); we launch its own fused Triton
+kernel (_post_expert_norm_weighted_sum_kernel) at every token count instead: same math, one launch.
+Otherwise identical to baseline.py.
 
 SGLang's NVFP4 expert path for Muse Spark Open on H200 (Marlin MoE runner), at SGLang commit
 a55ab7d5ae1bba59ac351e55026fe7f7644ecc5f: MuseSpark1xFp4Experts._forward_marlin, starting after the pre-expert norm.
@@ -21,8 +25,9 @@ from sgl_kernel.scalar_type import scalar_types
 
 from sglang.kernels.ops.activation.activation import silu_and_mul
 from sglang.kernels.ops.moe.moe_wna16_marlin import moe_wna16_marlin_gemm
+import triton
 from sglang.kernels.ops.muse_spark_v12.fused_post_expert_norm_weighted_sum_triton import (
-    fused_post_expert_norm_weighted_sum,
+    _post_expert_norm_weighted_sum_kernel,
 )
 from sglang.srt.layers.moe.fused_moe_triton import moe_align_block_size
 from sglang.srt.layers.quantization.marlin_utils import marlin_make_workspace
@@ -154,6 +159,18 @@ def kernel_fn(data, state):
         cache2, cache3, bank["w2"], None, bank["w2_s"], bank["w2_gs"], None, None, None, ws,
         sorted_ids, block_experts, n_padded, topk_weights, top_k=1,
         size_m=num_tokens * TOP_K, size_n=size_k, size_k=size_n, **common).view(num_tokens, TOP_K, size_k)
-    return fused_post_expert_norm_weighted_sum(
-        y, topk_weights, norm_weight=state["norm_w"], eps=POST_NORM_EPS, weight_first=True,
-        slot_expert_ids=local_ids)
+    return _post_norm_sum(y, topk_weights, state["norm_w"], local_ids)
+
+
+def _post_norm_sum(y, topk_weights, norm_w, slot_ids):
+    """SGLang's fused post-expert norm + weighted sum kernel, launched directly at any token count
+    (fused_post_expert_norm_weighted_sum's own launch, minus its < 32-token PyTorch fallback)."""
+    tokens, topk, hidden = y.shape
+    x = y.contiguous()
+    out = torch.empty((tokens, hidden), dtype=x.dtype, device=x.device)
+    block_h = triton.next_power_of_2(hidden)
+    _post_expert_norm_weighted_sum_kernel[(tokens,)](
+        x, norm_w, topk_weights.contiguous(), out, slot_ids,
+        TOPK=topk, H=hidden, eps=POST_NORM_EPS, APPLY_NORM=True, HAS_WEIGHT=True, WEIGHT_FIRST=True,
+        HAS_IDS=True, BLOCK_H=block_h, num_warps=8 if block_h >= 4096 else 4, num_stages=2)
+    return out

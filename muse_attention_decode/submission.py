@@ -80,7 +80,7 @@ def _attn_split(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_ptr,
                 ks_ptr, vs_ptr, o_ptr, lse_ptr, qk_scale, chunk, PAGE,
                 L: tl.constexpr, G: tl.constexpr, HKV: tl.constexpr, NSPLIT: tl.constexpr,
                 WINDOW: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-                D: tl.constexpr, HW: tl.constexpr):
+                D: tl.constexpr, HW: tl.constexpr, HOIST: tl.constexpr = False):
     h = tl.program_id(0)
     s = tl.program_id(1)
     b = tl.program_id(2)
@@ -118,6 +118,8 @@ def _attn_split(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_ptr,
         page = tl.load(pt_ptr + b * stride_pt + t // PAGE, mask=tmask, other=0)
         row = (page.to(tl.int64) * PAGE + t % PAGE) * (HKV * D) + h * D
         kb = tl.load(k_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
+        if HOIST:  # issue the V load before the QK / softmax math: two gathers in flight
+            vb = tl.load(v_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
         k = _kv(kb, HW, q.dtype)
         sc = tl.dot(q, tl.trans(k)) * scale
         ok = tmask[None, :] & (t[None, :] <= pos[:, None])
@@ -129,7 +131,8 @@ def _attn_split(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_ptr,
         p = tl.exp2(sc - m_safe[:, None])
         alpha = tl.exp2(m_i - m_safe)
         l_i = l_i * alpha + tl.sum(p, 1)
-        vb = tl.load(v_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
+        if not HOIST:
+            vb = tl.load(v_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
         v = _kv(vb, HW, q.dtype)
         acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
         m_i = m_new
@@ -146,7 +149,7 @@ def _attn_split_rows(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_
                      ks_ptr, vs_ptr, o_ptr, lse_ptr, qk_scale, chunk, PAGE,
                      L: tl.constexpr, G: tl.constexpr, HKV: tl.constexpr, NSPLIT: tl.constexpr,
                      WINDOW: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-                     D: tl.constexpr, HW: tl.constexpr):
+                     D: tl.constexpr, HW: tl.constexpr, HOIST: tl.constexpr = False):
     """Both KV heads in one program, so each key's whole cache row (HKV*64 bytes) is read at
     once. Each query row sits in its own KV head's 64-wide segment of a HKV*64-wide query
     (zeros elsewhere), so Q_ext @ row^T is exactly its head's logit; the PV product's other
@@ -191,6 +194,8 @@ def _attn_split_rows(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_
         page = tl.load(pt_ptr + b * stride_pt + t // PAGE, mask=tmask, other=0)
         row = (page.to(tl.int64) * PAGE + t % PAGE) * W
         kb = tl.load(k_ptr + row[:, None] + c[None, :], mask=tmask[:, None], other=0)
+        if HOIST:
+            vb = tl.load(v_ptr + row[:, None] + c[None, :], mask=tmask[:, None], other=0)
         sc = tl.dot(q, tl.trans(_kv(kb, HW, q.dtype))) * scale
         ok = tmask[None, :] & (t[None, :] <= pos[:, None])
         if WINDOW > 0:
@@ -201,7 +206,8 @@ def _attn_split_rows(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_
         p = tl.exp2(sc - m_safe[:, None])
         alpha = tl.exp2(m_i - m_safe)
         l_i = l_i * alpha + tl.sum(p, 1)
-        vb = tl.load(v_ptr + row[:, None] + c[None, :], mask=tmask[:, None], other=0)
+        if not HOIST:
+            vb = tl.load(v_ptr + row[:, None] + c[None, :], mask=tmask[:, None], other=0)
         acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), _kv(vb, HW, q.dtype))
         m_i = m_new
     out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
@@ -296,16 +302,17 @@ def _norm_rope_store_torch(data, qkv, cfg):
     return q.reshape(T, hq * d)
 
 
-def _nsplit(cfg, batch, hkv, capacity):
-    """Splits per request: enough programs to fill the GPU, slices of at least ~256 keys."""
+def _nsplit(cfg, batch, progs_per_split, capacity, occ=4):
+    """Splits per request: ~occ programs per SM, slices of at least ~256 keys."""
     span = (cfg["window"] + cfg["q_len"] - 1) if cfg["window"] else capacity
-    want = max(1, (132 * 4) // (batch * hkv))
+    want = max(1, (132 * occ) // (batch * progs_per_split))
     by_len = max(1, span // 256)
     n = min(want, by_len, 256)
     return 1 << (n.bit_length() - 1)  # power of two (the combine's tl.arange)
 
 
-# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages); missing = SGLang's FA3 path.
+# (layer kind, q_len, batch) -> (kernel, BLOCK_N, warps, stages[, programs per SM, hoist V load]);
+# missing = SGLang's FA3 path.
 # "head": one KV head per program; "rows": both KV heads per program (whole cache rows).
 # Each entry beat FA3 on its shape in H200 check runs (v1b, v2b, v3, v4).
 ATTN_CFG = {
@@ -314,8 +321,11 @@ ATTN_CFG = {
     ("sliding", 1, 32): ("head", 64, 4, 3),
     ("sliding", 8, 16): ("head", 64, 4, 3),
     ("full", 1, 1): ("rows", 64, 4, 3),
-    ("full", 1, 16): ("head", 128, 4, 4),
-    ("full", 1, 32): ("head", 128, 4, 4),
+    # sweep A (check only): occupancy x V-load hoist x kernel on the four long full-layer shapes
+    ("full", 1, 16): ("rows", 64, 4, 3, 16, True),
+    ("full", 1, 32): ("head", 128, 4, 4, 16, True),
+    ("full", 8, 16): ("head", 64, 4, 3, 16, True),
+    ("full", 8, 32): ("rows", 64, 8, 3, 16, True),
 }
 # Shapes not in the scored table (the tests) use the split-KV kernel with these defaults.
 SCORED_BATCHES = (1, 16, 32)
@@ -358,8 +368,11 @@ def kernel_fn(data):
         q = q.float()  # the Triton interpreter has no bf16
     kind = "sliding" if cfg["window"] else "full"
     key = (kind, L, batch)
+    occ, hoist = 4, False
     if key in ATTN_CFG:
-        which, block_n, warps, stages = ATTN_CFG[key]
+        which, block_n, warps, stages, *extra = ATTN_CFG[key]
+        if extra:
+            occ, hoist = extra
     elif batch in SCORED_BATCHES or q.device.type == "cpu":
         which, block_n, warps, stages = ("head", 64, 4, 3) if q.device.type == "cpu" else (None, 0, 0, 0)
     else:
@@ -372,7 +385,7 @@ def kernel_fn(data):
     G = hq // hkv
     page = cfg["page_size"]
     capacity = data["page_table"].shape[1] * page
-    nsplit = _nsplit(cfg, batch, hkv, capacity)
+    nsplit = _nsplit(cfg, batch, 1 if which == "rows" else hkv, capacity, occ)
     span = (cfg["window"] + L - 1) if cfg["window"] else capacity
     chunk = triton.cdiv(span, nsplit)
     block_m = max(16, triton.next_power_of_2(G * L))
@@ -387,11 +400,11 @@ def kernel_fn(data):
         rows = max(16, triton.next_power_of_2(hq * L))
         _attn_split_rows[(nsplit, batch)](
             *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=rows, BLOCK_N=block_n, D=d,
-            HW=hw, num_warps=warps, num_stages=stages)
+            HW=hw, HOIST=hoist, num_warps=warps, num_stages=stages)
     else:
         _attn_split[(hkv, nsplit, batch)](
             *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=block_m, BLOCK_N=block_n, D=d,
-            HW=hw, num_warps=warps, num_stages=stages)
+            HW=hw, HOIST=hoist, num_warps=warps, num_stages=stages)
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
     _combine_norm_gate[(T, hq)](o_part, lse, gate, qkv.stride(0), out, RMS_EPS, HQ=hq, NSPLIT=nsplit, D=d,
