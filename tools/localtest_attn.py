@@ -3,9 +3,13 @@
 # splits and the combine, not H200 speed.
 import os, sys
 os.environ["TRITON_INTERPRET"] = "1"
-d = "/workspace/open-kernel-challenge/muse_attention_decode"; sys.path.insert(0, d)
+d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "muse_attention_decode"); sys.path.insert(0, d)
 import torch, reference as R, submission as S
-cases = [dict(batch=3, ctx=3000, heads="tp8", layer="full"), dict(batch=17, ctx=1800, heads="tp8", layer="full", spread="agentic"), dict(batch=5, ctx=3000, heads="tp8", layer="sliding", page=1), dict(batch=1, ctx=2900, heads="tp8", layer="full", page=1),dict(batch=1, ctx=10, heads="tp8", layer="sliding"),
+cases = [dict(batch=3, ctx=3000, heads="tp8", layer="full"),
+         dict(batch=17, ctx=1800, heads="tp8", layer="full", spread="agentic"),
+         dict(batch=5, ctx=3000, heads="tp8", layer="sliding", page=1),
+         dict(batch=1, ctx=2900, heads="tp8", layer="full", page=1),
+         dict(batch=1, ctx=10, heads="tp8", layer="sliding"),
          dict(batch=2, ctx=2047, heads="tp8", layer="sliding"),
          dict(batch=2, ctx=700, heads="tp8", layer="sliding", q_len=8, spread="mixed", page=1),
          dict(batch=2, ctx=3000, heads="tp8", layer="full"),

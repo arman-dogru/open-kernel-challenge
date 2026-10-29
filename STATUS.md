@@ -1,31 +1,86 @@
-# STATUS — updated Oct 28 2026, ~4:40 PM ET
+# STATUS — updated Oct 28 2026, ~11:35 PM ET
 
 **Rules acceptance: 2026-10-28 ~6 PM ET, rules re-accepted by Arman personally via `okc login` (on his own
 Mac); the box's earlier agent-accepted session was logged out and revoked. Submits from here use his token.**
 
-Board (all provisional until the organisers' post-contest reruns):
-- **Overall kernel board: rank 893 / ~2313** (was 1016 at 4:05 PM ET) (top-50 = serving priority; top-1000 = Meta interview pool).
-- Prefill (`muse_prefill_layer`) has its own board and does not count toward overall — not attempted yet.
+Board (from `okc leaderboard`, Oct 28 ~11:20 PM ET; all provisional until the organisers' post-contest reruns):
+- **Overall kernel board: rank 877** (top-1000 reached at ~7:45 PM ET). Prefill (`muse_prefill_layer`) has its own board.
 
-| problem | best submitted | rank | job | what it is |
+| problem | best run (board row) | rank | job | file (sha256[:16]) |
 |---|---|---|---|---|
-| muse_bf16_proj | **1.098×** (95% 1.081–1.114) | 1142 | 735b0e423e784074 (v3_hybrid) | swap-AB Triton GEMM for o/pooler ≤32 tok; hi+lo router split-K ≤32 tok; cuBLAS elsewhere |
-| muse_attention_decode | **1.075×** (1.059–1.091) | 946 / 958 | a08410ebc3b04bf7 (v5_best) | split-KV Triton decode + combine fused w/ norm·gate on sliding decode, full decode, sliding verify-16; FA3 elsewhere |
-| muse_moe_w4a16 | **1.269×** (1.250–1.288) | 861 | 1b5c613200e84954 (v9_postnorm_fused) | SGLang Marlin, moe_block_size re-tuned at 128/256 tokens; SGLang's fused post-expert norm+sum Triton kernel launched directly below 32 tokens (its wrapper falls back to ~10 PyTorch kernels there): decode-1 1.48×, verify-1 1.27× |
-| muse_decode_layer | **1.180×** (1.162–1.198) | 765 | 9cb6d6a409ff4cd6 (v4_postnorm_fused) | baseline + the swaps above (split-KV attention, Triton o/pooler/router, Marlin block sizes, direct post-expert norm kernel) |
+| muse_bf16_proj | **1.115×** | 1125 | f0bd99103bf74d83 | v6_router_stacked.py (53c5c18702e1cb65) |
+| muse_attention_decode | **1.117×** | 941 | fd13316e3a7f458b | v9_regime.py (3646405dcccf3ac6) |
+| muse_moe_w4a16 | **1.270×** | 872 | d1c5ffc5c3eb4cee | v9b_resubmit.py (387a465e9857920f) |
+| muse_decode_layer | **1.202×** | 760 | af0211f6c18e43eb | v6_attn_regime.py (a297541a0f65e8c6) |
 | muse_prefill_layer | — | — | — | not started |
 
-Reference points (per-problem speedup at rank 50 / 300 / 500 / 900, Oct 28): bf16 1.55/1.37/1.26/1.17,
-attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1.46/—.
+MoE board reference (Oct 28 late): rank 50 / 300 / 500 / 700 / 800 at 2.37 / 1.97 / 1.74 / 1.38 / 1.31×.
 
-## Quotas used today (UTC day Oct 28; resets 8 PM ET), from `okc problems`
-| problem | submits used | checks used |
-|---|---|---|
-| bf16_proj | 1 / 10 | 5 / 20 |
-| attention_decode | 2 / 10 | 10 / 20 (2 were Triton compile failures) |
-| moe_w4a16 | 2 / 10 | 9 / 20 |
-| decode_layer | 4 / 10 | 6 / 20 |
-| prefill_layer | 0 / 10 | 0 / 20 |
+PR #1 (audit-r2-fixes) merged at e4aacf1 after audit r3 (APPROVED). Decisions: bf16 v7 not submitted (same GPU
+path as the board row); attention v12 and decode_layer v8 on HOLD (scored launches identical to the board rows).
+
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems`
+- Checks: MoE 6 of 20 used (v11, v12, v14, v15, v16, v17 MoE checks); attention 1; decode_layer 1; bf16 0.
+- Submits: 0 of 10 used on every problem.
+
+## Oct 29 ~12:20 AM ET resume (successor worker)
+- Branch moe-packed-dequant pushed (was local only). bf16 v8/v9/v10 checks: 1.061x / 0.727x / 0.769x (all
+  below the board 1.115x; stream-K and the 12-bit lossless weights lose to cuBLAS) -> bf16 parked.
+- MoE v18_gemv (check a428ce02220746c9): 0.577x. CUDA-core grouped split-K GEMV for bs <= 32, Marlin for
+  bs 128/256. bs1 66.6 us (Marlin 52.9), bs8 352, bs16 742, bs32 1289 us. Bound by x loads (~1 per weight
+  per route: 3-D [route,row,word] tiles put one row per thread) -> LSU-bound, scales with routes.
+- MoE v19_gemv_rows (check e99c9700c7754496): 0.220x. 2-D tiles, many rows per thread, one accumulator per
+  route: the 16-output dequant asm is materialised for all rows before the FMAs -> 160-255 registers and
+  heavy spills (up to ~3000). Even unspilled (32,32,4,4) MB=1: bs1 74.8 us vs Marlin 55.1 us (in-prepare bench).
+  Verdict: Triton CUDA-core GEMV can't hold the dequantised weights in registers; with the earlier tensor-core
+  tries (v11-v17) MoE-in-Triton is a dead end at 8 checks. Only a hand-written CUDA kernel could compete.
+- bf16 v11_cublas_bench (check ae407efff6954988): 1.132x (= v7 path; CI 1.115-1.149). In-prepare bench:
+  cuBLAS with pre-transposed weights (torch.mm(x, W.t().contiguous())) is ~1 us faster on pooler (all m) and
+  unpooler m16/32; nothing beats SGLang's cuBLAS on qkv_gate; v7's Triton stays best on o.
+- bf16 v12_bench_probe (check b8e3f1ba63b044c5): same bench at m=128/256 + probe of in-process JIT toolchains
+  (cupy / cuda-python NVRTC / CuTe DSL / tilelang) in the judge image, to see whether a hand-written CUDA
+  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed).
+
+## Oct 29 ~1:30 AM ET: MoE breakthrough (branch moe-packed-dequant) - NOT submitted
+Key finding: the judge image has CuPy, cuda-python NVRTC, CuTe DSL, tilelang, quack (probe in bf16 v12,
+check b8e3f1ba63b044c5). NVRTC compiles CUDA C++ in-process (no subprocess), so hand-written CUDA is usable.
+| check | file | speedup | note |
+|---|---|---|---|
+| 8b24db54101e43dd | v20_cuda_gemv.py | 0.902x | CUDA-core GEMV via CuPy/NVRTC; bs1 1.697x, larger bs compute-bound |
+| 953f0d3cecdd42c1 | v21_mma.py | 1.046x | tensor-core mma.sync m16n8k16 NVFP4 x BF16, A-fragment repack; correct first try |
+| ed185d25d2834988 | v22_mma_pf.py | 1.100x | weight prefetch + silu_mul kernel; prefetch depth did not matter (issue-bound) |
+| b109e9378bc14d66 | v23_scale_nb.py | **1.325x (1.305-1.345)** | scale path 14 -> 5 ops (cvt chain); NB param; beats board 1.270x (CIs disjoint) |
+| d66cab4599544266 | v24_tuned.py | **1.376x (1.356-1.397)** 5/5 | bs1 1.775 bs8 1.398 bs16 1.368 bs32 1.100; v23 + SMALL_CFG from v23's bench (NB=1), BENCH off: the submit candidate |
+v23 per shape: bs1 1.753x, bs16 1.232x, bs32 1.029x, bs8 1.350x; bs128/256 stay on Marlin (1.37/1.31x).
+
+Next steps (MoE, in order):
+1. Senior Larper review of PR #2 (v24), then decide on a submit (Arman's workflow: PR -> review -> joint decision).
+2. bs32 is still ~1.0x: kernel is instruction-issue-bound (~26 instrs per k-step). Ideas: lop3-fused dequant,
+   amortise the scale cvt across NB, use the tensor-core path for bs128/256 too (Marlin there is ~3-4x off SOL).
+3. Zero-buffer memset + silu_mul + route_prep + post-norm = 4 small launches (~8 us at bs1); fuse.
+4. Same NVRTC route for bf16 small-m GEMV (qkv_gate/pooler/unpooler), since Triton topped out ~1.03x there.
+Tools: /tmp/nvrtc-venv (cuda-bindings + nvrtc cu12) compiles CUDA offline: /tmp/v20/cc2.py <file.cu>.
+
+## MoE Triton rewrite (branch moe-packed-dequant; check-only so far, none beats Marlin yet)
+| check | file | speedup | what changed |
+|---|---|---|---|
+| 16374f95f195436b | v11_triton_packed.py | 0.545× | int64 words of bit-permuted codes, rotate+AND bf16x2 dequant, joins to a [BN,BK] tile |
+| 698ae1d5cbd94a3a | v12_splitk.py | 0.510× | + split-K with FP32 atomics for small batches; own FP32 post-norm kernel |
+| e57901fe9def4655 | v14_slots.py | 0.578× | dequant straight into the wgmma register A operand (int16 4-slot layout, 11 int ops / 8 codes) |
+| 4b804f6c561745bf | v15_tiled.py | 0.723× | tile-contiguous weights/scales; mma.sync (BN=32, 2 warps) avoids wgmma's per-dot wait+fence |
+| 603e1fdbeed64cac | v16_persistent.py | 0.722× | persistent grid over routed blocks only; one routing-prep kernel |
+| c8a9842f36014fa0 | v17_occupancy.py | 0.725× | occupancy probes: 2 stages, 1-warp CTAs, uncapped persistent grid |
+
+What we learned: cutting the dequant from ~13 to ~2.7 instructions per weight did not by itself help (v11/v12/v14
+all ~1 TB/s): the BF16 tile round-tripping through shared memory, then wgmma's per-dot wait + fence, then
+scattered 128-byte row reads were the limits.
+Outcome (v17, 0.725×; bs1 74.6 / bs16 291 / bs32 359 / bs8 208 / bs128 630 / bs256 845 µs): the board's v9 Marlin
+path is faster at every scored shape (52.9 / 153 / 205 / 110 / 332 / 473 µs), so no regime-level hybrid helps either.
+The issue/memory utilisation is ~17% / ~21% (latency-bound at ~12 warps/SM, ~168 registers/thread), so closing a
+1.4-2.3× gap would need a different kernel structure (hand-written CUDA, Marlin-style), not more tile tuning.
+Parked as a dead end after 6 of 20 MoE checks; moved on to the bf16 small-batch GEMV. With those fixed (v15) the kernels reach ~1.2-1.5 TB/s at
+~12 warps/SM, still below Marlin (~2 TB/s). The `SWEEP` dicts in v12-v17 are exploration only (one tile config
+per scored token count, check runs only); a submit would use one regime-level config.
 
 ## Kaggle GPU (cap 15 h for the Kaggle week ending Oct 31 00:00 UTC, shared with Developper)
 - Used by this agent: 1 probe session (~3 min, ≈0.05 h) on 2×T4 — confirmed torch 2.11 / Triton 3.6, bf16 `tl.dot` works on T4.
@@ -33,15 +88,18 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
   offline sm_90 compile (`tools/compile_sm90.py`) cover logic and compile errors without spending GPU hours.
   Reserve Kaggle for a future CUDA `load_inline` kernel that needs a real nvcc+GPU correctness run.
 
-## Queued (committed before any send)
-- `muse_attention_decode/runs/v9_regime.py`: Peer Review M1 fix. Paths chosen by regime, not exact batch:
-  sliding decode → split-KV head; full decode b=1 → rows 4/SM; full decode b≥2 → rows 16/SM + V-load
-  hoist; every verify block and untuned head layouts → FA3. Same kernels as check bb656112f11e4320
-  (v8_rows_occ, **~1.12×**, 3,355 µs vs 3,504.5 µs submitted) except sliding verify b16 now FA3 (1.08→1.0×
-  on that shape, ~2% of one load). CPU tests pass (incl. b=2 full decode through the new path).
-  Plan: one check, then submit if ≥ 1.10×.
-- `muse_decode_layer/runs/v6_attn_regime.py`: v4 (submitted, 1.180×) + the v9_regime attention path and
-  kernels (verbatim), replacing the exact-shape SPLITKV_ON table. Plan: check, submit if > 1.180×.
+## Audit r3 follow-ups
+- Done in this branch: STATUS board/ledger refresh (stale running/profile rows filled in from `okc status`), the
+  nearest-pow2 paragraph corrected (the count *is* a power of two; m5 not claimed as a measured fix),
+  tools/ledger.py now reads sends.tsv, tools/okc_send.py records every attempt (UNPARSED / FILE CHANGED rows),
+  tools/localtest_attn.py uses a path relative to itself, one case per line.
+- For the next attention / decode_layer version (sent runs/ files are never edited): the `_nsplit` docstring
+  must say slices can be shorter than 256 keys (nearest rounding: capacity 1800 -> 8 splits of 225 keys), and
+  the combine's `NSPLIT_P2` masking is dead when the count is always a power of two (drop it or say why it stays).
+
+## Previously queued (done)
+- attention v9_regime: submitted 18:05 ET, fd13316e3a7f458b, 1.117×. decode_layer v6_attn_regime: submitted
+  18:01 ET, af0211f6c18e43eb, 1.202×.
 
 ## Audit r1 follow-ups
 - M1 (attention exact-batch routing): fixed in v9_regime (above); decode_layer v6 also by regime.
@@ -73,16 +131,20 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
 Batch 1 has one request: 4 programs/SM already hits the 256-split cap (span // 256 and the 256
 limit), and 16/SM would only add combine work; the V-load hoist was only measured at b16/b32. From
 batch 2 up, 4/SM leaves the GPU under-filled (b16: 512 programs of ~5,400 keys each), so 16/SM +
-hoist (check runs 172c76d6, fd78956d, bb656112: 160/296 us vs 178/349 us at b16/b32). Since audit
-r2 m5 the split count is no longer floored to a power of two (batch 17 got ~8/SM): see PR
-audit-r2-fixes.
+hoist (check runs 172c76d6, fd78956d, bb656112: 160/296 us vs 178/349 us at b16/b32).
+The split count is still a power of two. Board v9 floors it; audit r2 m5 led to v12 (attention) / v8
+(decode_layer), which round to the *nearest* power of two (ties down), so batch 17 gets 128 splits
+instead of 64. On the scored shapes this gives the same counts as v9 (checks 86a42f76, 9f1742ce are
+redraws of the same launches), and the unscored batches it changes (17-21, 34-43) have not been
+measured on H200, so it is not claimed as a fix. v12/v8 are on HOLD per audit r3; nearest-pow2
+rides along with the next attention change that has a measured gain.
 
 ## Resubmit of MoE 1b5c613200e84954 under Arman's token (Oct 28 ~6:25 PM ET)
 `okc submit` of the byte-identical file (sha256 76bb16baff1fe0a6…, via tools/okc_send.py) returned
 job cdfb626e97b84cc8 with status **duplicate** (`duplicate_of: 1b5c613200e84954`, same content
 hash): the judge did not rerun it, no run was used (8/10 left), and no new board entry exists.
 
-## Job ledger (every okc job; times ET; sha256 = first 16 hex of the runs/ file as committed)
+## Job ledger before sends.tsv (frozen; times ET; sha256 = first 16 hex of the runs/ file as committed)
 
 Caveat (audit m2): files before the ledger existed were not hashed at send time; `04269b7477f74417`'s
 runs/v4_postnorm_fused.py got a docstring-only edit after that check ran; board job `9cb6d6a409ff4cd6`
@@ -131,9 +193,24 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | Oct 28 16:09 | bb656112f11e4320 | muse_attention_decode | check | v8_rows_occ.py | 193256efe4e05761 | passed | 3,355.1 µs |
 | Oct 28 17:59 | 3795339b0fd94eed | muse_attention_decode | check | v9_regime.py | 3646405dcccf3ac6 | passed | 3,356.8 µs |
 | Oct 28 17:59 | e9402d661a8b42b8 | muse_decode_layer | check | v6_attn_regime.py | a297541a0f65e8c6 | passed | 19.01 ms |
-| Oct 28 18:01 | af0211f6c18e43eb | muse_decode_layer | SUBMIT | (profile not saved yet) | — | passed | 18.83 ms |
+| Oct 28 18:01 | af0211f6c18e43eb | muse_decode_layer | SUBMIT | v6_attn_regime.py | a297541a0f65e8c6 | passed 1.202× | 18.83 ms |
 | Oct 28 18:01 | c3f668686d154849 | muse_bf16_proj | check | v5_sweepC.py | 745ff209e93e29a2 | passed | 5,112.8 µs |
-| Oct 28 18:05 | 50ace93cf34f4af0 | muse_moe_w4a16 | check | (profile not saved yet) | — | running |  |
+| Oct 28 18:05 | 50ace93cf34f4af0 | muse_moe_w4a16 | check | v10_bsm2_sweep.py | d5a97e0b36a2c43e | passed 1.167× |  |
 | Oct 28 18:05 | e042f303d1fc449c | muse_bf16_proj | check | v6_router_stacked.py | 53c5c18702e1cb65 | passed | 4,280.7 µs |
-| Oct 28 18:05 | fd13316e3a7f458b | muse_attention_decode | SUBMIT | (profile not saved yet) | — | running |  |
-| Oct 28 18:06 | f0bd99103bf74d83 | muse_bf16_proj | SUBMIT | (profile not saved yet) | — | running |  |
+| Oct 28 18:05 | fd13316e3a7f458b | muse_attention_decode | SUBMIT | v9_regime.py | 3646405dcccf3ac6 | passed 1.117× | 3,372 µs |
+| Oct 28 18:06 | f0bd99103bf74d83 | muse_bf16_proj | SUBMIT | v6_router_stacked.py | 53c5c18702e1cb65 | passed 1.115× |  |
+
+## Send ledger (generated by tools/ledger.py from sends.tsv; times ET)
+
+| time | job | problem | kind | file | sha256[:16] (at send) | commit | judge |
+|---|---|---|---|---|---|---|---|
+| 2026-10-28 18:21:14 | cdfb626e97b84cc8 | muse_moe_w4a16 | submit | v9_postnorm_fused.py | 76bb16baff1fe0a6 | 895ab18 | pending (profile not saved) |
+| 2026-10-28 19:43:36 | d1c5ffc5c3eb4cee | muse_moe_w4a16 | submit | v9b_resubmit.py | 387a465e9857920f | 22a1a54 | 1.270x (1.251-1.289), passed=True |
+| 2026-10-28 19:44:08 | 1c3e09378cc0443a | muse_bf16_proj | check | v7_audit_nits.py | 95340c7e18ff1893 | 3a9173d | 1.120x (1.103-1.137), passed=True |
+| 2026-10-28 19:44:08 | 85e6332651ba4603 | muse_attention_decode | check | v11_smooth_split.py | b832f2f431b7f56f | 3a9173d | 1.112x (1.095-1.128), passed=True |
+| 2026-10-28 19:44:08 | e41c3583fe974851 | muse_decode_layer | check | v7_smooth_split.py | c96fc78c5993d0b8 | 3a9173d | 1.187x (1.169-1.204), passed=True |
+| 2026-10-28 22:22:28 | 86a42f76b1164863 | muse_attention_decode | check | v12_nearest_pow2.py | f8a23d04bcfa890c | 52ea71e | 1.115x (1.098-1.131), passed=True |
+| 2026-10-28 22:22:28 | 9f1742cea00f4460 | muse_decode_layer | check | v8_nearest_pow2.py | ea3b88086cdef7e8 | 52ea71e | 1.193x (1.175-1.211), passed=True |
+| 2026-10-28 22:45:11 | 16374f95f195436b | muse_moe_w4a16 | check | v11_triton_packed.py | c0e08e1d71d9766b | e4b1f3d | 0.545x (0.537-0.554), passed=True |
+| 2026-10-28 22:54:47 | 698ae1d5cbd94a3a | muse_moe_w4a16 | check | v12_splitk.py | 0da91269b409c323 | 19dd489 | 0.510x (0.503-0.518), passed=True |
+| 2026-10-28 23:09:44 | e57901fe9def4655 | muse_moe_w4a16 | check | v14_slots.py | 26e907cd7893c3fe | 4b21850 | pending (profile not saved) |

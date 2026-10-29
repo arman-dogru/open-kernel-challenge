@@ -1,0 +1,75 @@
+BENCH bs=1 local_routes=2 experts=2 marlin=55.1us
+BENCH bs=1 MB=1 tile=(64, 32, 8, 4) 74.0us err_vs_marlin=0.0055 regs=247/138 spills=0/0
+BENCH bs=1 MB=1 tile=(32, 32, 4, 4) 74.8us err_vs_marlin=0.0055 regs=166/95 spills=0/0
+BENCH bs=1 MB=1 tile=(16, 64, 4, 2) 82.0us err_vs_marlin=0.0055 regs=255/133 spills=44/0
+BENCH bs=1 MB=1 tile=(32, 64, 2, 4) 82.5us err_vs_marlin=0.0055 regs=255/163 spills=22/0
+BENCH bs=1 MB=1 tile=(64, 64, 2, 8) 84.9us err_vs_marlin=0.0055 regs=255/169 spills=22/0
+BENCH bs=1 MB=1 tile=(32, 64, 4, 4) 86.9us err_vs_marlin=0.0055 regs=245/139 spills=0/0
+BENCH bs=1 MB=1 tile=(64, 64, 4, 4) 88.2us err_vs_marlin=0.0055 regs=255/243 spills=134/0
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(32, 64, 4, 4) 79.3us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(64, 64, 4, 4) 73.1us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(32, 64, 2, 4) 78.8us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(64, 64, 2, 8) 79.7us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(16, 64, 4, 2) 72.9us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(32, 32, 4, 4) 78.4us
+BENCH bs=1 MB=1 w13=(64, 32, 8, 4) w2=(64, 32, 8, 4) 73.9us
+BENCH bs=8 local_routes=21 experts=3 marlin=66.2us
+BENCH bs=8 MB=2 tile=(32, 32, 4, 4) 472.3us err_vs_marlin=0.0056 regs=248/128 spills=0/0
+BENCH bs=8 MB=2 tile=(64, 32, 8, 4) 484.1us err_vs_marlin=0.0056 regs=255/244 spills=174/0
+BENCH bs=8 MB=4 tile=(32, 32, 4, 4) 489.7us err_vs_marlin=0.0056 regs=255/248 spills=24/0
+BENCH bs=8 MB=2 tile=(32, 64, 4, 4) 633.3us err_vs_marlin=0.0056 regs=255/248 spills=172/0
+BENCH bs=8 MB=2 tile=(16, 64, 4, 2) 683.0us err_vs_marlin=0.0056 regs=255/168 spills=356/0
+BENCH bs=8 MB=2 tile=(32, 64, 2, 4) 685.1us err_vs_marlin=0.0056 regs=255/249 spills=284/0
+BENCH bs=8 MB=2 tile=(64, 64, 2, 8) 721.0us err_vs_marlin=0.0056 regs=255/249 spills=284/0
+BENCH bs=8 MB=2 tile=(64, 64, 4, 4) 1047.4us err_vs_marlin=0.0056 regs=168/255 spills=734/70
+BENCH bs=8 MB=4 tile=(16, 64, 4, 2) 3717.0us err_vs_marlin=0.0056 regs=32/255 spills=2300/0
+BENCH bs=8 MB=4 tile=(64, 32, 8, 4) 3967.3us err_vs_marlin=0.0056 regs=32/255 spills=1938/12
+BENCH bs=8 MB=4 tile=(32, 64, 4, 4) 4258.1us err_vs_marlin=0.0056 regs=32/255 spills=1908/12
+BENCH bs=8 MB=4 tile=(64, 64, 2, 8) 4919.8us err_vs_marlin=0.0056 regs=32/255 spills=2638/58
+BENCH bs=8 MB=4 tile=(32, 64, 2, 4) 4945.4us err_vs_marlin=0.0056 regs=32/255 spills=2638/58
+BENCH bs=8 MB=4 tile=(64, 64, 4, 4) 5596.1us err_vs_marlin=0.0056 regs=32/32 spills=2982/1602
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(32, 64, 4, 4) 501.5us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(64, 64, 4, 4) 418.1us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(32, 64, 2, 4) 487.1us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(64, 64, 2, 8) 503.4us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(16, 64, 4, 2) 406.5us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(32, 32, 4, 4) 473.0us
+BENCH bs=8 MB=2 w13=(32, 32, 4, 4) w2=(64, 32, 8, 4) 418.3us
+BENCH bs=16 local_routes=32 experts=3 marlin=86.6us
+BENCH bs=16 MB=4 tile=(32, 32, 4, 4) 717.8us err_vs_marlin=0.0055 regs=255/248 spills=24/0
+BENCH bs=16 MB=2 tile=(32, 32, 4, 4) 718.2us err_vs_marlin=0.0055 regs=248/128 spills=0/0
+BENCH bs=16 MB=2 tile=(64, 32, 8, 4) 747.5us err_vs_marlin=0.0055 regs=255/244 spills=174/0
+BENCH bs=16 MB=2 tile=(32, 64, 4, 4) 965.0us err_vs_marlin=0.0055 regs=255/248 spills=172/0
+BENCH bs=16 MB=2 tile=(32, 64, 2, 4) 1024.5us err_vs_marlin=0.0055 regs=255/249 spills=284/0
+BENCH bs=16 MB=2 tile=(16, 64, 4, 2) 1036.4us err_vs_marlin=0.0055 regs=255/168 spills=356/0
+BENCH bs=16 MB=2 tile=(64, 64, 2, 8) 1090.1us err_vs_marlin=0.0055 regs=255/249 spills=284/0
+BENCH bs=16 MB=2 tile=(64, 64, 4, 4) 1550.0us err_vs_marlin=0.0055 regs=168/255 spills=734/70
+BENCH bs=16 MB=4 tile=(16, 64, 4, 2) 5703.0us err_vs_marlin=0.0055 regs=32/255 spills=2300/0
+BENCH bs=16 MB=4 tile=(64, 32, 8, 4) 5893.0us err_vs_marlin=0.0055 regs=32/255 spills=1938/12
+BENCH bs=16 MB=4 tile=(32, 64, 4, 4) 6406.7us err_vs_marlin=0.0055 regs=32/255 spills=1908/12
+BENCH bs=16 MB=4 tile=(64, 64, 2, 8) 7344.1us err_vs_marlin=0.0055 regs=32/255 spills=2638/58
+BENCH bs=16 MB=4 tile=(32, 64, 2, 4) 7394.8us err_vs_marlin=0.0055 regs=32/255 spills=2638/58
+BENCH bs=16 MB=4 tile=(64, 64, 4, 4) 8399.2us err_vs_marlin=0.0055 regs=32/32 spills=2982/1602
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(32, 64, 4, 4) 732.8us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(64, 64, 4, 4) 3157.8us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(32, 64, 2, 4) 725.8us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(64, 64, 2, 8) 746.0us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(16, 64, 4, 2) 553.7us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(32, 32, 4, 4) 718.6us
+BENCH bs=16 MB=4 w13=(32, 32, 4, 4) w2=(64, 32, 8, 4) 603.4us
+BENCH bs=32 local_routes=93 experts=3 marlin=98.4us
+BENCH bs=32 MB=4 tile=(32, 32, 4, 4) 1813.0us err_vs_marlin=0.0055 regs=255/248 spills=24/0
+BENCH bs=32 MB=4 tile=(16, 64, 4, 2) 14757.8us err_vs_marlin=0.0055 regs=32/255 spills=2300/0
+BENCH bs=32 MB=4 tile=(64, 32, 8, 4) 15658.9us err_vs_marlin=0.0055 regs=32/255 spills=1938/12
+BENCH bs=32 MB=4 tile=(32, 64, 4, 4) 17047.2us err_vs_marlin=0.0055 regs=32/255 spills=1908/12
+BENCH bs=32 MB=4 tile=(32, 64, 2, 4) 19229.7us err_vs_marlin=0.0055 regs=32/255 spills=2638/58
+BENCH bs=32 MB=4 tile=(64, 64, 2, 8) 19259.8us err_vs_marlin=0.0055 regs=32/255 spills=2638/58
+BENCH bs=32 MB=4 tile=(64, 64, 4, 4) 21949.5us err_vs_marlin=0.0055 regs=32/32 spills=2982/1602
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(32, 64, 4, 4) 1844.7us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(64, 64, 4, 4) 8208.3us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(32, 64, 2, 4) 1837.4us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(64, 64, 2, 8) 1882.9us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(16, 64, 4, 2) 1360.7us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(32, 32, 4, 4) 1813.3us
+BENCH bs=32 MB=4 w13=(32, 32, 4, 4) w2=(64, 32, 8, 4) 1499.2us
+BENCH done in 59s

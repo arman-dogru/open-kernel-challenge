@@ -1,0 +1,101 @@
+BENCH bs=1 local_routes=2 experts=2 marlin=55.7us
+BENCH bs=1 MB=1 tile=(16, 16, 4, 4) 64.6us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(16, 16, 2, 8) 66.6us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(32, 16, 4, 4) 69.1us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(32, 8, 2, 4) 73.6us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(16, 16, 8, 4) 74.8us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(16, 16, 1, 4) 78.7us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(16, 32, 2, 4) 98.4us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 tile=(8, 32, 4, 2) 103.3us err_vs_marlin=0.0058
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(16, 16, 4, 4) 65.0us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(32, 16, 4, 4) 65.4us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(16, 32, 2, 4) 81.0us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(16, 16, 8, 4) 66.9us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(8, 32, 4, 2) 84.1us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(32, 8, 2, 4) 65.2us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(16, 16, 1, 4) 72.0us
+BENCH bs=1 MB=1 w13=(16, 16, 4, 4) w2=(16, 16, 2, 8) 65.4us
+BENCH bs=8 local_routes=21 experts=3 marlin=67.5us
+BENCH bs=8 MB=2 tile=(32, 8, 2, 4) 265.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(32, 8, 2, 4) 297.7us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(32, 8, 2, 4) 314.2us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(16, 32, 2, 4) 393.0us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(16, 16, 1, 4) 398.8us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(16, 16, 1, 4) 399.5us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(16, 16, 1, 4) 414.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(16, 16, 2, 8) 414.5us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(16, 16, 2, 8) 424.5us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(16, 16, 2, 8) 425.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(16, 16, 4, 4) 431.7us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(16, 16, 4, 4) 442.0us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(32, 16, 4, 4) 448.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(32, 16, 4, 4) 451.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(16, 16, 4, 4) 464.0us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(8, 32, 4, 2) 479.8us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(32, 16, 4, 4) 506.0us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(16, 16, 8, 4) 519.5us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(8, 32, 4, 2) 528.8us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(16, 16, 8, 4) 529.7us err_vs_marlin=0.0055
+BENCH bs=8 MB=4 tile=(16, 16, 8, 4) 534.2us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(16, 32, 2, 4) 765.7us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 tile=(16, 32, 2, 4) 772.3us err_vs_marlin=0.0055
+BENCH bs=8 MB=1 tile=(8, 32, 4, 2) 848.5us err_vs_marlin=0.0055
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 4, 4) 351.4us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(32, 16, 4, 4) 344.7us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(16, 32, 2, 4) 515.8us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 8, 4) 379.5us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(8, 32, 4, 2) 350.4us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(32, 8, 2, 4) 266.0us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 1, 4) 342.2us
+BENCH bs=8 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 2, 8) 346.8us
+BENCH bs=16 local_routes=32 experts=3 marlin=87.5us
+BENCH bs=16 MB=2 tile=(32, 8, 2, 4) 381.2us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(32, 8, 2, 4) 408.2us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(16, 32, 2, 4) 568.4us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(16, 16, 1, 4) 586.6us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(16, 16, 1, 4) 613.4us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(16, 16, 2, 8) 622.4us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(16, 16, 2, 8) 627.9us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(16, 16, 4, 4) 674.6us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(32, 16, 4, 4) 677.3us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(16, 16, 4, 4) 677.9us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(8, 32, 4, 2) 698.0us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(32, 16, 4, 4) 744.0us err_vs_marlin=0.0055
+BENCH bs=16 MB=4 tile=(16, 16, 8, 4) 777.6us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(16, 16, 8, 4) 792.4us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(8, 32, 4, 2) 803.5us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 tile=(16, 32, 2, 4) 1166.2us err_vs_marlin=0.0055
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 4, 4) 529.1us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(32, 16, 4, 4) 507.4us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(16, 32, 2, 4) 770.0us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 8, 4) 576.9us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(8, 32, 4, 2) 528.9us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(32, 8, 2, 4) 382.0us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 1, 4) 501.8us
+BENCH bs=16 MB=2 w13=(32, 8, 2, 4) w2=(16, 16, 2, 8) 518.7us
+BENCH bs=32 local_routes=93 experts=3 marlin=102.4us
+BENCH bs=32 MB=4 tile=(32, 8, 2, 4) 995.1us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(32, 8, 2, 4) 1277.9us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(16, 16, 1, 4) 1288.6us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(16, 16, 4, 4) 1357.6us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(16, 32, 2, 4) 1418.4us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(16, 16, 8, 4) 1446.6us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(16, 16, 1, 4) 1640.0us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(16, 16, 2, 8) 1659.1us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(8, 32, 4, 2) 1679.7us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(16, 16, 4, 4) 1761.9us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(16, 16, 2, 8) 1794.3us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(16, 16, 8, 4) 1938.3us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 tile=(32, 16, 4, 4) 1971.6us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(16, 32, 2, 4) 11318.7us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(8, 32, 4, 2) 11603.1us err_vs_marlin=0.0055
+BENCH bs=32 MB=8 tile=(32, 16, 4, 4) 13885.7us err_vs_marlin=0.0055
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(16, 16, 4, 4) 1371.3us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(32, 16, 4, 4) 1365.5us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(16, 32, 2, 4) 985.7us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(16, 16, 8, 4) 1429.8us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(8, 32, 4, 2) 1079.9us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(32, 8, 2, 4) 995.6us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(16, 16, 1, 4) 1359.4us
+BENCH bs=32 MB=4 w13=(32, 8, 2, 4) w2=(16, 16, 2, 8) 1371.2us
+BENCH done in 34s

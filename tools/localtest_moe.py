@@ -2,8 +2,9 @@
 # interpreter can't do bf16). Checks routing/indexing/dequant, not H200 precision or speed.
 import os, sys
 os.environ["TRITON_INTERPRET"] = "1"
-d = "/workspace/open-kernel-challenge/muse_moe_w4a16"; sys.path.insert(0, d)
-import torch, reference as R, submission as S
+d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "muse_moe_w4a16"); sys.path.insert(0, d); sys.path.insert(0, d + "/runs")
+import importlib, torch, reference as R
+S = importlib.import_module(sys.argv[1] if len(sys.argv) > 1 else "submission")
 R.D_HIDDEN = 256; R.D_EXPERT = 256
 W = R.generate_weights(5, device="cpu")
 st = S.prepare(W)

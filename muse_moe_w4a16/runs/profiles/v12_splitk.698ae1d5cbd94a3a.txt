@@ -1,0 +1,101 @@
+okc run 698ae1d5cbd94a3a on muse_moe_w4a16
+submission  /workspace/open-kernel-challenge/muse_moe_w4a16/runs/v12_splitk.py
+status      ok
+passed      true
+speedup     0.5104126331800731
+speedup_ci  [0.502756443682372 0.5184876721535122]
+score_us    26348.28984582633
+tests       5/5 passed
+
+scored shapes (µs; speed of light is the reference's bound)
+case                                                         sglang      yours  speedup        sol  
+bs=1 load=decode 1 sharding=ep8                               77.28     106.97   0.722x      11.42  
+bs=16 load=decode 16 sharding=ep8                            186.50     341.97   0.545x      52.52  
+bs=32 load=decode 32 sharding=ep8                            206.13     709.55   0.291x      70.76  
+bs=8 load=verify 1 sharding=ep8                              149.55     280.86   0.532x      37.32  
+bs=128 load=verify 16 sharding=ep8                           460.99     838.53   0.550x     101.34  
+bs=256 load=verify 32 sharding=ep8                           609.42    1154.82   0.528x     108.94  
+
+profile 0: bs=1 load=decode 1 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                         79.3 µs  84.1%      2
+_post_norm_sum_kernel                                              3.2 µs   3.4%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       2.4 µs   2.5%      2
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.9 µs   2.0%      2
+_silu_mul_kernel                                                   1.6 µs   1.7%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   1.6%      2
+_moe_align_small_numel_kernel                                      1.3 µs   1.4%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.1 µs   1.1%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.0 µs   1.1%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   1.1%      1
+total                                                             94.3 µs
+
+profile 1: bs=16 load=decode 16 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                        370.8 µs  95.5%      2
+_post_norm_sum_kernel                                              4.5 µs   1.2%      1
+void moe_align_block_size_kernel<int>(int const*, int*, i...       2.6 µs   0.7%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       2.2 µs   0.6%      2
+void at::native::vectorized_elementwise_kernel<8, at::nat...       2.0 µs   0.5%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   0.4%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.3 µs   0.3%      1
+void count_and_sort_expert_tokens_kernel<int>(int const*,...       1.1 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.1 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.1 µs   0.3%      1
+total                                                            388.1 µs
+
+profile 2: bs=32 load=decode 32 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                        910.1 µs  98.0%      2
+_post_norm_sum_kernel                                              4.5 µs   0.5%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       2.9 µs   0.3%      2
+void moe_align_block_size_kernel<int>(int const*, int*, i...       2.6 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       2.0 µs   0.2%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.9 µs   0.2%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   0.2%      2
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.2 µs   0.1%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.2 µs   0.1%      1
+void count_and_sort_expert_tokens_kernel<int>(int const*,...       1.2 µs   0.1%      1
+total                                                            929.0 µs
+
+profile 3: bs=8 load=verify 1 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                        286.9 µs  93.9%      2
+_post_norm_sum_kernel                                              3.6 µs   1.2%      1
+_moe_align_small_numel_kernel                                      3.5 µs   1.1%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       2.2 µs   0.7%      2
+void at::native::vectorized_elementwise_kernel<8, at::nat...       2.0 µs   0.6%      2
+_silu_mul_kernel                                                   2.0 µs   0.6%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.6 µs   0.5%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   0.5%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.1 µs   0.4%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.1 µs   0.3%      1
+total                                                            305.5 µs
+
+profile 4: bs=128 load=verify 16 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                        820.6 µs  97.3%      2
+_post_norm_sum_kernel                                              5.2 µs   0.6%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       4.6 µs   0.6%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       2.9 µs   0.3%      2
+void moe_align_block_size_kernel<int>(int const*, int*, i...       2.6 µs   0.3%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.8 µs   0.2%      2
+void count_and_sort_expert_tokens_kernel<int>(int const*,...       1.8 µs   0.2%      1
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   0.2%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.0 µs   0.1%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.0 µs   0.1%      1
+total                                                            843.0 µs
+
+profile 5: bs=256 load=verify 32 sharding=ep8
+kernel                                                           GPU time  share  calls
+_moe_gemm                                                       1156.9 µs  97.6%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       8.1 µs   0.7%      1
+_post_norm_sum_kernel                                              6.2 µs   0.5%      1
+void at::native::elementwise_kernel<128, 2, at::native::g...       3.1 µs   0.3%      2
+void moe_align_block_size_kernel<int>(int const*, int*, i...       2.8 µs   0.2%      1
+void count_and_sort_expert_tokens_kernel<int>(int const*,...       2.4 µs   0.2%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       1.8 µs   0.1%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.5 µs   0.1%      2
+void at::native::vectorized_elementwise_kernel<4, at::nat...       1.3 µs   0.1%      1
+void at::native::vectorized_elementwise_kernel<8, at::nat...       0.9 µs   0.1%      1
+total                                                           1185.0 µs
