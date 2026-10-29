@@ -29,6 +29,24 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:57-5:05 AM ET: MoE v26d, activation staging (branch moe-v26d off origin/moe-v26c 377f1f0). Offline only, no check.
+- Quantified before building (bs32, GEMM 1 CTA = 8 warps, KS 1024, 16 k-tiles per warp; GEMM 2 alike):
+  - L2 bytes: ~2560 CTAs x 16 KB per GEMM, ~82 MB per call over ~160 us = ~0.5 TB/s, ~5% of L2 bandwidth: not a cost.
+  - Issue: staging is ~4 LDG + 4 STS + index math (~40 instr) per thread vs ~3700 in the k-loop (16 tiles x ~115 x
+    gate+up): ~1%.
+  - Latency: the lst -> x loads (two dependent L2 hits, ~1 us) already overlap the first PF weight loads (HBM, same order),
+    and 4 CTAs/SM hide the rest. Register-resident rows would need ~128 B-fragment regs per lane; sharing across more
+    N-tiles per CTA (wider W) does not cut per-thread issue.
+  - Expected: ~0-2% of moe_mma, ~0.5-1.5% overall at bs8-32 (less at bs1); clearing 1.52 needs ~+3%. Not promising.
+- Built the cheapest exact variant anyway: cp.async.cg 16-byte staging straight to smem (src-size 0 zero-fill), one
+  commit group waited before the barrier; same bytes, bit-identical to v26c. tools/build_moe_v26d.py ->
+  muse_moe_w4a16/runs/v26d_async_stage.py, byte-exact at HEAD. NVRTC: -2 PTX instructions per kernel (3260 -> 3258,
+  1732 -> 1730), same registers (64/54 at 8 warps, 72/52 at 4) and spills. Confirms ~0 gain; check not spent.
+- Where MoE small-batch time really is now: moe_mma's k-loop issue (dequant ~9 ALU + 4 HMUL2 + 2 splat per 32-bit code
+  word, near the bit-layout minimum per the v26b analysis), post-norm 3-4 us, route_prep 2-3 us. Bigger next levers would be
+  structural: fp16 instead of bf16 MMA operands (HMUL2 f16 + e2m1 -> f16 bit layout with more slack; precision delta
+  needs analysis), or a combined GEMM1+GEMM2 persistent kernel to remove one more launch + tail (~2-3 us).
+
 ## Oct 29 ~4:46-5:00 AM ET: MoE v26c (branch moe-v26c off origin/moe-v26 325eb72; built from v26a)
 - Gap census from v26a's profiles (bs 1/8/16/32): moe_mma 36.0/69.8/93.2/157.5 us; outside it silu_mul 2.7-3.8, post-norm
   3.4-3.7, zero-fill 0.9-3.6, route_prep 1.4-1.6 us, plus 5 inter-kernel gaps: ~9-13 us per call (6-8% at bs16-32,
