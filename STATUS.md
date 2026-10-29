@@ -29,6 +29,44 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:30-5:00 AM ET: bf16 v28 checked (Arman: spend the expiring check), v29 built offline (not sent)
+- v28 check c20bde96ace6489d (sha 3613a8de..., commit 56d3628): 9/9 passed, 0.915x (95% 0.901-0.928); v27 was 0.927x, v17 1.133x.
+  m=8-32 per shape, median us / speedup (v17 | v27 | v28):
+  | case | m | v17 | v27 | v28 |
+  |---|---|---|---|---|
+  | verify 1 qkv_gate | 8 | 14.0/0.991 | 14.6/0.954 | 17.0/0.838 |
+  | verify 1 o | 8 | 6.4/1.079 | 9.3/0.702 | 9.0/0.734 |
+  | verify 1 pooler | 8 | 20.3/1.071 | 21.7/0.973 | 24.5/0.864 |
+  | verify 1 unpooler (n 1024) | 8 | 6.8/1.020 | 7.0/0.972 | 6.6/1.018 |
+  | decode 16 qkv_gate | 16 | 13.9/1.005 | 21.5/0.659 | 21.2/0.655 |
+  | decode 16 o | 16 | 6.3/1.084 | 11.9/0.555 | 11.7/0.572 |
+  | decode 16 pooler | 16 | 20.0/1.069 | 32.2/0.664 | 30.0/0.714 |
+  | decode 16 unpooler | 16 | 18.2/1.029 | 32.3/0.582 | 29.7/0.611 |
+  | decode 32 qkv_gate | 32 | 14.0/1.007 | 26.8/0.540 | 30.0/0.479 |
+  | decode 32 o | 32 | 6.3/1.070 | 16.5/0.427 | 16.5/0.414 |
+  | decode 32 pooler | 32 | 20.4/1.069 | 38.1/0.570 | 42.4/0.509 |
+  | decode 32 unpooler | 32 | 18.1/1.033 | 37.5/0.487 | 41.5/0.449 |
+  Other shapes run v17 routes and match v17. No m=8-32 shape beats v17.
+- Reading: the pipelining (all loads in flight) bought nothing visible, and where v28 doubled S (qkv/pooler 16->32 and 8->32)
+  it got slower, growing with m. Time vs m fits a split-K atomic cost of S*M*N FP32 atomics at roughly 110-180 G/s
+  (qkv m 8->32: +13 us for +1.8 M atomics; pooler +18 us for +3.1 M; o +7.5 us for +0.8 M). Extrapolated atomic-free base:
+  qkv ~12.7 (v17 14.0), pooler ~18.5 (20.3), o ~6.5 (6.4), unpooler ~17.9 (18.2) us.
+- v29 (tools/bf16_v29_wgmma.cu, tools/build_bf16_v29.py -> muse_bf16_proj/runs/v29_wgmma_partials.py, built from v28,
+  byte-exact at HEAD 3a95c60, sha 7ca4ece7...): atomics replaced by plain __stcg partial stores ws[s][tok][n] ([S][32][N]
+  FP32) + last-CTA (counter) reduction summing s = 0..S-1 in a fixed order (float4 over 4 rows, 4 accumulators),
+  deterministic, no ws zeroing; packed 8-byte BF16 stores. Verified offline: NVRTC sm_90a on the embedded source, 0 spills
+  (56 regs at NT 8/16/32); CPU emulation tools/tests/bf16_v29_partials_emu.py exact over M 5-32 and 3 geometries with
+  random CTA completion order, stale-garbage ws (never read), counter back to 0, and back-to-back calls reusing ws; CPU
+  tests 13/13 (the CPU path never runs the kernel).
+- v29 routing: per (layer, m) via WG_ROUTE, which is EMPTY. No measured v28 win, and no clear projected win: v29's
+  last-CTA reduction reads S*64*M partials serially (qkv S 32: 64 KB per tile at m 8, 256 KB at m 32), projected
+  ~1.5 us / ~4 us tail plus partial traffic. Projections: verify-1 pooler ~20.5 vs v17 20.3, qkv ~14.7 vs 14.0 (ties at best),
+  m 16/32 worse. With the route empty, prepare() skips the wgmma repack/workspaces/compile and v29 behaves as v17 (do not check it).
+- Next if bf16 is revisited: the reduction must stay distributed and cheap (cluster/DSMEM reduction of the S splits, or
+  fewer splits with deeper per-CTA pipelines, i.e. producer warp + full/empty barriers), and per-CTA overhead needs a
+  micro-profile. Measured wgmma base time only beats v17 by ~9% on qkv/pooler even with a free reduction. Fresh bf16 quota
+  after 8 PM ET; v29 with WG_ROUTE = {("pooler", 8), ("qkv_gate", 8)} is the cheapest single measurement of the new reduction.
+
 ## Oct 29 ~4:25-4:55 AM ET: bf16 v28 pipelined wgmma (branch bf16-wgmma). Built and verified offline; NOT sent (check saved).
 v28_wgmma_pipe.py, built by tools/build_bf16_v28.py from v17 + tools/bf16_v28_wgmma.cu (byte-exact at HEAD).
 - Change vs v27: each CTA's k range is NCH = 4 64-k chunks with one W stage per chunk (no slot reuse), all 4 TMA loads issued up
