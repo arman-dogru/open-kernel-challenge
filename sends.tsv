@@ -67,3 +67,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 15:03:44	check	e09cfcf550ab476e	muse_prefill_layer	muse_prefill_layer/runs/v1_router_fused.py	957484e6864648861e1aa209c89b78e47f19aef82e7538ac0d35594b1a9c49a2	8dc446d
 2026-10-29 15:09:26	check	e855efdd22b847af	muse_prefill_layer	muse_prefill_layer/runs/v2_dequant_grouped.py	f00bf46b23a6f01ed6fbdeb7f4599a14b78c50402d0feffafbd0117b6cbb2fca	80ec2f4
 2026-10-29 15:11:02	check	b007869e4f7e48ef	muse_prefill_layer	muse_prefill_layer/runs/v2_dequant_grouped.py	a50a6821ea21d13e2bba36aa0229c9e2ccb84c78f295be3641f9bbab6fd9ab9f	1125f74
+2026-10-29 15:15:32	check	08475fbb90c34f16	muse_prefill_layer	muse_prefill_layer/runs/v2b_dequant_grouped.py	d0b2cc111752af1414674082c7b2aa653a785e4d3c33f5583b093148b49d40ff	7114f67
