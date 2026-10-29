@@ -29,3 +29,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 01:21:10	check	e2894d15903941b8	muse_bf16_proj	muse_bf16_proj/runs/v15_cpasync.py	8f52465c334fec20d7a929ca2141121e64d54ec9013cca97987f9e41d4b39359	61a50e9
 2026-10-29 01:23:08	check	693c8d31f9134635	muse_bf16_proj	muse_bf16_proj/runs/v16_l2pf.py	b1f4f0190cc44832a0b97db01da50ee70e7cecf4634727c427cd8b66c4ad6936	515afa4
 2026-10-29 01:24:37	check	febf8e4adb9c4e1a	muse_bf16_proj	muse_bf16_proj/runs/v17_best_route.py	9f56573b6e19ab585c2a2b63ab4e04a775470dbea9cdb602cdd8da3eb4838d47	8d34c13
+2026-10-29 01:26:41	check	14ba8a134b084788	muse_bf16_proj	muse_bf16_proj/runs/v18_dbuf.py	7b8931a7ca240b667427381bbca4f49b36fbd370eea43442f5194ee6c4b7c5b6	e8d5883

@@ -42,7 +42,7 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
   kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed).
 
 ## Oct 29 ~1:15-1:30 AM ET: bf16 CUDA GEMV session (branch moe-packed-dequant). Nothing beats the board clearly.
-Board entry 1.115x (v7). bf16 checks used in this session: 5 (10/20 in the window since 8 PM ET).
+Board entry 1.115x (v7). bf16 checks used in this session: 6 (11/20 in the window since 8 PM ET).
 | check | file | speedup | note |
 |---|---|---|---|
 | cdcf4c435dce475a | v13_cuda_gemv.py | failed 7/9 | NVRTC mma.sync GEMV (W repacked into A-fragment order, 16 B x loads); CUDA_CFG keyed by exact m -> KeyError m=7. In-prepare bench data in log |
@@ -50,6 +50,7 @@ Board entry 1.115x (v7). bf16 checks used in this session: 5 (10/20 in the windo
 | e2894d15903941b8 | v15_cpasync.py | 0.681x | per-warp cp.async ring: 2x slower kernels (cause not found) |
 | 693c8d31f9134635 | v16_l2pf.py | 1.009x | v14 + per-warp cp.async.bulk.prefetch.L2: worse everywhere |
 | febf8e4adb9c4e1a | v17_best_route.py | **1.133x (1.116-1.150)** | best per-shape routing from judge numbers; about the same as v11's 1.132x, so not clearly above 1.115x |
+| 14ba8a134b084788 | v18_dbuf.py | 1.062x | register double buffer (118 regs, loads really in flight) on qkv m<=8 and pooler m<=16. Still worse: qkv m1 15.0 vs 13.7 us, pooler m16 33 us. The CUDA-core-issue GEMV is a dead end at these shapes. |
 v17 routing:
 - The CUDA GEMV is used only for the sliced unpooler (m<=8), at about 1.02-1.03x.
 - Pre-transposed cuBLAS (`torch.mm(x, W.t().contiguous())`) is used for qkv m16/32, pooler m32, unpooler m>=16 and o m128.
@@ -62,7 +63,7 @@ Next steps (bf16):
 1. qkv_gate is about 1.00x at every m. The kernel takes 13.5 us against an SOL of 7.9 us, so it has the most headroom. Try a TMA (cp.async.bulk.tensor) or
    wgmma-based swap-AB kernel with a persistent grid of 132 CTAs, plus a deep mbarrier pipeline (4-6 stages of 16-32 KB per SM).
    That is the standard way to reach >4 TB/s; plain loads and cp.async 16 B both topped out at about 3.2 TB/s.
-2. To force loads to stay in flight in the current gemv_mma, double-buffer the registers explicitly (load batch i+1 before mma of batch i).
+2. (Done in v18; it did not help.) The explicit register double buffer was slower, so the next real attempt is TMA/wgmma (step 1).
 3. Use the pooler/o Triton configs at m128/256 (they currently fall back to cuBLAS-T at 1.00-1.02x).
 
 ## Oct 29 ~1:30 AM ET: MoE breakthrough (branch moe-packed-dequant) - NOT submitted
