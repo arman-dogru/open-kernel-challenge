@@ -1,0 +1,51 @@
+PROBE python 3.12.3 torch 2.14.1+cu130 triton 3.8.0
+PROBE cupy found
+PROBE cuda found
+PROBE cuda.bindings found
+PROBE cuda.bindings.nvrtc found
+PROBE cuda.bindings.driver found
+PROBE cuda.core found
+PROBE cuda.core.experimental -
+PROBE cuda.nvrtc -
+PROBE cutlass found
+PROBE cutlass.cute found
+PROBE tilelang found
+PROBE flashinfer found
+PROBE tvm -
+PROBE nvidia.cuda_nvrtc -
+PROBE numba.cuda found
+PROBE deep_gemm found
+PROBE sgl_kernel found
+PROBE vllm -
+PROBE pycuda -
+PROBE quack found
+PROBE thunderkittens -
+PROBE cuda.tile found
+PROBE helion -
+PROBE nvcc /usr/local/cuda/bin/nvcc ptxas /usr/local/cuda/bin/ptxas
+PROBE jiterator ok
+BENCH qkv_gate m=1 n=2304 sglang=20.77us | linear=20.90(0e+00) mm_Wt=20.96(0e+00) swap_c=21.15(0e+00) mv=21.25(0e+00) matmul_Wt=21.38(0e+00) mvT=21.50(0e+00)
+BENCH qkv_gate m=8 n=2304 sglang=21.44us | matmul_Wt=21.54(0e+00) linear=21.57(0e+00) mm_Wt=21.73(0e+00) swap=22.24(0e+00) tri(32, 256, 2, 4, 4)=24.61(7e-05) swap_c=24.99(0e+00)
+BENCH qkv_gate m=16 n=2304 sglang=21.47us | swap=21.41(0e+00) matmul_Wt=21.47(0e+00) linear=21.54(0e+00) mm_Wt=21.57(0e+00) swap_c=23.94(0e+00) tri(32, 256, 2, 4, 4)=24.86(1e-04)
+BENCH qkv_gate m=32 n=2304 sglang=21.89us | swap=21.60(0e+00) linear=21.63(0e+00) matmul_Wt=21.89(0e+00) mm_Wt=21.95(0e+00) swap_c=24.26(0e+00) tri(32, 256, 1, 4, 4)=26.46(2e-04)
+BENCH qkv_gate m=128 n=2304 sglang=25.44us | linear=25.44(0e+00) matmul_Wt=26.69(0e+00) mm_Wt=26.88(0e+00)
+BENCH qkv_gate m=256 n=2304 sglang=29.06us | linear=29.15(0e+00) mm_Wt=32.06(0e+00) matmul_Wt=32.22(0e+00)
+BENCH o m=1 n=8192 sglang=12.35us | tri(64, 128, 1, 4, 4)=11.84(0e+00) mm_Wt=12.26(0e+00) matmul_Wt=12.29(0e+00) mvT=12.29(0e+00) linear=12.32(0e+00) mv=12.42(0e+00)
+BENCH o m=8 n=8192 sglang=12.26us | tri(64, 128, 1, 4, 4)=11.90(0e+00) mm_Wt=12.03(0e+00) matmul_Wt=12.19(0e+00) swap=12.22(0e+00) linear=12.35(0e+00) tri(32, 256, 1, 4, 4)=12.83(0e+00)
+BENCH o m=16 n=8192 sglang=12.35us | tri(64, 128, 1, 4, 4)=11.84(0e+00) mm_Wt=12.19(0e+00) matmul_Wt=12.22(0e+00) linear=12.26(0e+00) swap=12.26(0e+00) tri(32, 256, 1, 4, 4)=12.58(0e+00)
+BENCH o m=32 n=8192 sglang=12.51us | tri(64, 128, 1, 4, 4)=11.87(0e+00) matmul_Wt=12.16(0e+00) mm_Wt=12.16(0e+00) swap=12.32(0e+00) linear=12.48(0e+00) tri(32, 256, 1, 4, 4)=13.02(0e+00)
+BENCH o m=128 n=8192 sglang=12.93us | mm_Wt=12.80(0e+00) matmul_Wt=12.83(0e+00) linear=12.99(0e+00)
+BENCH o m=256 n=8192 sglang=14.05us | linear=13.92(0e+00) matmul_Wt=13.95(0e+00) mm_Wt=13.98(0e+00)
+BENCH pooler m=1 n=4096 sglang=30.27us | matmul_Wt=29.95(8e-05) tri(32, 256, 1, 4, 4)=30.05(3e-04) mm_Wt=30.08(8e-05) mvT=30.24(8e-05) swap_c=30.24(0e+00) swap=30.30(0e+00)
+BENCH pooler m=8 n=4096 sglang=30.46us | matmul_Wt=29.54(1e-04) mm_Wt=29.54(1e-04) tri(32, 256, 1, 4, 4)=30.30(2e-04) linear=30.50(0e+00) swap=31.07(0e+00) tri(64, 256, 2, 8, 3)=32.26(1e-04)
+BENCH pooler m=16 n=4096 sglang=30.69us | matmul_Wt=29.70(1e-04) mm_Wt=29.82(1e-04) tri(32, 256, 1, 4, 4)=30.05(3e-04) swap=30.53(0e+00) linear=30.56(0e+00) tri(32, 256, 2, 4, 4)=32.22(1e-04)
+BENCH pooler m=32 n=4096 sglang=31.20us | mm_Wt=30.18(1e-04) matmul_Wt=30.21(1e-04) swap=30.98(0e+00) tri(32, 256, 1, 4, 4)=30.98(2e-04) linear=31.23(0e+00) tri(64, 256, 2, 8, 3)=32.48(1e-04)
+BENCH pooler m=128 n=4096 sglang=32.67us | mm_Wt=32.29(2e-04) matmul_Wt=32.38(2e-04) linear=32.80(0e+00)
+BENCH pooler m=256 n=4096 sglang=38.21us | mm_Wt=36.64(0e+00) matmul_Wt=37.15(0e+00) linear=38.11(0e+00)
+BENCH unpooler m=1 n=1024 sglang=11.94us | mv=12.03(0e+00) linear=12.06(0e+00) swap_c=12.10(0e+00) mvT=12.19(0e+00) swap=12.19(0e+00) matmul_Wt=12.26(0e+00)
+BENCH unpooler m=8 n=1024 sglang=12.00us | matmul_Wt=12.06(0e+00) linear=12.13(0e+00) mm_Wt=12.32(0e+00) swap=12.80(0e+00) tri(16, 256, 4, 4, 4)=14.02(3e-05) tri(32, 256, 2, 4, 4)=14.62(4e-05)
+BENCH unpooler m=16 n=8192 sglang=28.22us | matmul_Wt=27.52(0e+00) mm_Wt=27.52(0e+00) swap=28.13(0e+00) linear=28.16(0e+00) tri(32, 256, 1, 4, 4)=28.35(0e+00) tri(64, 128, 1, 4, 4)=28.35(0e+00)
+BENCH unpooler m=32 n=8192 sglang=28.26us | matmul_Wt=27.58(0e+00) mm_Wt=27.65(0e+00) linear=28.26(0e+00) swap=28.26(0e+00) tri(64, 128, 1, 4, 4)=28.83(0e+00) tri(32, 256, 1, 4, 4)=29.12(0e+00)
+BENCH unpooler m=128 n=8192 sglang=29.60us | mm_Wt=28.77(0e+00) matmul_Wt=28.80(0e+00) linear=29.54(0e+00)
+BENCH unpooler m=256 n=8192 sglang=33.22us | linear=33.25(0e+00) mm_Wt=33.98(0e+00) matmul_Wt=34.14(0e+00)
+BENCH done 12s
