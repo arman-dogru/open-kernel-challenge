@@ -22,3 +22,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 00:56:41	check	8b24db54101e43dd	muse_moe_w4a16	muse_moe_w4a16/runs/v20_cuda_gemv.py	74ea274de62746c66e76df6662eba22efe736e52500792151f71cab307870c20	229448f
 2026-10-29 01:02:55	check	953f0d3cecdd42c1	muse_moe_w4a16	muse_moe_w4a16/runs/v21_mma.py	e3dab931aff74a55f7ba9a209b5ab0d6ceb9db72cbb05e55bceff32f6c39f605	0d353d4
 2026-10-29 01:05:44	check	ed185d25d2834988	muse_moe_w4a16	muse_moe_w4a16/runs/v22_mma_pf.py	5f18b181ebebc7386a39925e33d8c598924c13d202e312f1243943926baa9226	7a268e2
+2026-10-29 01:10:40	check	b109e9378bc14d66	muse_moe_w4a16	muse_moe_w4a16/runs/v23_scale_nb.py	b851c2463208b4084a65ff858aabfb328eacfb927cda72a5c3ed7ba2532690ef	edb8de9
