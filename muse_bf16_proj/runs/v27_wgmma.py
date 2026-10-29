@@ -229,8 +229,11 @@ def prepare(weights):
             state[name + "_wg"] = _wg_repack(weights[name])
             state[name + "_wgws"] = torch.zeros((WG_MAX_M, n), device=weights[name].device, dtype=torch.float32)
             state[name + "_wgcnt"] = torch.zeros((n // 64,), device=weights[name].device, dtype=torch.int32)
+        import cupy as cp
+        drv = cp.cuda.driver
+        attr = getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8)
         for nt in (8, 16, 32):  # NVRTC-compile now; allow up to 160 KB of dynamic shared memory
-            _wg_mod(nt).max_dynamic_shared_size_bytes = 160 * 1024
+            drv.funcSetAttribute(_wg_mod(nt).ptr, attr, 160 * 1024)
         torch.cuda.synchronize()
     if BENCH and weights["qkv_gate"].is_cuda:
         _bench(state)
