@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/tmp/muse_bf16_proj-qei4refz/run/worker.py", line 458, in child_main
+    fn(state["data"])
+  File "/tmp/muse_bf16_proj-qei4refz/run/worker.py", line 415, in <lambda>
+    return functools.partial(lambda k, p, d: k(d, p), fn, state["prep"])
+                                             ^^^^^^^
+  File "/tmp/muse_bf16_proj-qei4refz/run/submission.py", line 145, in kernel_fn
+    return _run_triton(x, state["router_hi"], state["router_lo"], m, n, k,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_bf16_proj-qei4refz/run/submission.py", line 131, in _run_triton
+    _swapab_gemm[grid](x, w, lo, out, m, n, k, x.stride(0), w.stride(0), out.stride(0),
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 778, in run
+    launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 496, in launch_metadata
+    self._init_handles()
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 468, in _init_handles
+    raise_(OutOfResources(self.metadata.shared, max_shared, "shared memory"))
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 460, in raise_
+    raise err
+triton.runtime.errors.OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 232448. Reducing block sizes or `num_stages` may help.
