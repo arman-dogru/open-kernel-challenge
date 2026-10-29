@@ -4,7 +4,7 @@ FP32 accumulate) for qkv_gate, o, pooler and unpooler at 8 <= m <= 32 (v17's rou
 repacked in prepare() (a pure permutation) into the no-swizzle K-major core-matrix image wgmma reads from shared
 memory, streamed by 1-D cp.async.bulk (TMA) into 4 mbarrier stages; x is staged once per CTA in the same layout;
 split-K partials are FP32 atomics, the last CTA of a 64-row tile writes BF16. Compiled in prepare() with NVRTC
-(cuda.bindings, in-process, -arch=sm_90a) to a cubin loaded by CuPy.
+(cuda.bindings, in-process, -arch=sm_90a) to a cubin, loaded from memory by CuPy (cupy.cuda.function.Module).
 
 v17: v14 with per-shape routing taken from judge numbers (the in-prepare bench misled): CUDA GEMV
 only on the sliced unpooler (m <= 8); qkv_gate m <= 8 back on SGLang, pooler m <= 16 back on v7 Triton;
@@ -456,8 +456,6 @@ WG_MIN_M, WG_MAX_M, WG_ST = 8, 32, 4
 def _wg_mod(NT):
     """NVRTC (cuda.bindings, in-process) -> cubin for sm_90a (wgmma needs the arch-specific target) -> CuPy."""
     if NT not in _WG:
-        import os
-        import tempfile
         import cupy as cp
         from cuda.bindings import nvrtc
         err, prog = nvrtc.nvrtcCreateProgram(_WG_SRC.encode(), b"wg.cu", 0, [], [])
@@ -472,12 +470,10 @@ def _wg_mod(NT):
         _, size = nvrtc.nvrtcGetCUBINSize(prog)
         cubin = b" " * size
         nvrtc.nvrtcGetCUBIN(prog, cubin)
-        fd, path = tempfile.mkstemp(suffix=".cubin")
-        with os.fdopen(fd, "wb") as f:
-            f.write(cubin)
-        _WG[NT] = cp.RawModule(path=path).get_function("gemm_wg")
-        os.unlink(path)
-    return _WG[NT]
+        mod = cp.cuda.function.Module()
+        mod.load(cubin)  # from memory: no files
+        _WG[NT] = (mod, mod.get_function("gemm_wg"))
+    return _WG[NT][1]
 
 
 def _wg_repack(w):
