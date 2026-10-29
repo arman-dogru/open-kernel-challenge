@@ -16,3 +16,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-28 23:52:17	check	a31e7fe5dd184d13	muse_bf16_proj	muse_bf16_proj/runs/v9_zk.py	59cb50e935a0e206a05a55f2b007b1c726f25ec45aa3f40123cb360ed387f068	cfc51b3
 2026-10-29 00:08:07	check	633e5dfd0b494aa0	muse_bf16_proj	muse_bf16_proj/runs/v10_zk_occ.py	79202623e5513664c8bf194b5f38ddf7ca3108e988ecd70db0d8693bab3c727a	6bd49df
 2026-10-29 00:33:05	check	a428ce02220746c9	muse_moe_w4a16	muse_moe_w4a16/runs/v18_gemv.py	eecc105961109dcd4de49af81372e536eb8f70daeca61a2cb548fee50e75b102	4c87f91
+2026-10-29 00:45:37	check	e99c9700c7754496	muse_moe_w4a16	muse_moe_w4a16/runs/v19_gemv_rows.py	1c0d4b62ca9b34a9395cffb50ced744076d045cac30e0856b042ff46993cc0ff	c4a9c23
