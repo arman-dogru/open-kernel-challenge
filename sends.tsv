@@ -60,6 +60,7 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 04:21:02	check	ca0ac29de0c347d8	muse_bf16_proj	muse_bf16_proj/runs/v27_wgmma.py	fcc4113c87b5492fed56a215cba1785a18849532da127bec5b0134994a491050	f311bfb
 2026-10-29 04:29:40	check	c20bde96ace6489d	muse_bf16_proj	muse_bf16_proj/runs/v28_wgmma_pipe.py	3613a8dee3e8c1236cd881239d54d02162768cba9c543cdd1c7b1661a1f1f6f4	cd5a674
 2026-10-29 04:38:35	check	bbebbbdf181f4934	muse_moe_w4a16	muse_moe_w4a16/runs/v26a_int_splat.py	196c6708eb8b18fc3a1a40bdbc1540b0d6801ead9124201f0f6cc2c940b80203	05d6779
+2026-10-29 04:41:57	check	b94ed32acfce4452	muse_decode_layer	muse_decode_layer/runs/v16_int_splat.py	a1057a4381c2abd5f63b0176e5b1c6492ec36b71f5ba3ddee7e73ee4bfb63e63	7bdc9bc
 2026-10-29 04:49:09	check	f479a34c48984e24	muse_moe_w4a16	muse_moe_w4a16/runs/v26c_fused_chain.py	85fe5e71ccae07e165f10e01c435f8ee97cf773780aa43624cd71b4fd452eeeb	8bd9599
 2026-10-29 05:03:00	submit	7eaa9622f391455b	muse_moe_w4a16	muse_moe_w4a16/runs/v26c_fused_chain.py	85fe5e71ccae07e165f10e01c435f8ee97cf773780aa43624cd71b4fd452eeeb	377f1f0
 2026-10-29 14:48:38	check	b8a324016b7b4422	muse_moe_w4a16	muse_moe_w4a16/runs/v26e_nb2_evict.py	31a3254249dfa680495bb6f0edd7bf2b9a0c65f896e0ff6cbd3ec084b00d5179	252697a
