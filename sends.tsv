@@ -27,3 +27,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 01:16:38	check	cdcf4c435dce475a	muse_bf16_proj	muse_bf16_proj/runs/v13_cuda_gemv.py	6f48f700322f488c175ff4c2337d8fffc015160789b383fbe186b5d6bb0b5c43	03a51f6
 2026-10-29 01:18:19	check	ee8f8ee6204d4b78	muse_bf16_proj	muse_bf16_proj/runs/v14_route.py	45a6b07a07fa7bf754012b6a33557b3ce0c786c7ef470015f35c0a26681b3158	a7ee222
 2026-10-29 01:21:10	check	e2894d15903941b8	muse_bf16_proj	muse_bf16_proj/runs/v15_cpasync.py	8f52465c334fec20d7a929ca2141121e64d54ec9013cca97987f9e41d4b39359	61a50e9
+2026-10-29 01:23:08	check	693c8d31f9134635	muse_bf16_proj	muse_bf16_proj/runs/v16_l2pf.py	b1f4f0190cc44832a0b97db01da50ee70e7cecf4634727c427cd8b66c4ad6936	515afa4
