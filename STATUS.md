@@ -1,27 +1,42 @@
-# STATUS — updated Oct 28 2026, ~11:35 PM ET
+# STATUS — updated Oct 29 2026, ~2:30 AM ET
 
 **Rules acceptance: 2026-10-28 ~6 PM ET, rules re-accepted by Arman personally via `okc login` (on his own
 Mac); the box's earlier agent-accepted session was logged out and revoked. Submits from here use his token.**
 
-Board (from `okc leaderboard`, Oct 28 ~11:20 PM ET; all provisional until the organisers' post-contest reruns):
-- **Overall kernel board: rank 877** (top-1000 reached at ~7:45 PM ET). Prefill (`muse_prefill_layer`) has its own board.
+Board (from `okc leaderboard`, Oct 29 ~2:27 AM ET; all provisional until the organisers' post-contest reruns):
+- **Overall kernel board: rank 800** (top-1000 reached at ~7:45 PM ET). Prefill (`muse_prefill_layer`) has its own board.
 
 | problem | best run (board row) | rank | job | file (sha256[:16]) |
 |---|---|---|---|---|
-| muse_bf16_proj | **1.115×** | 1125 | f0bd99103bf74d83 | v6_router_stacked.py (53c5c18702e1cb65) |
-| muse_attention_decode | **1.117×** | 941 | fd13316e3a7f458b | v9_regime.py (3646405dcccf3ac6) |
-| muse_moe_w4a16 | **1.270×** | 872 | d1c5ffc5c3eb4cee | v9b_resubmit.py (387a465e9857920f) |
-| muse_decode_layer | **1.202×** | 760 | af0211f6c18e43eb | v6_attn_regime.py (a297541a0f65e8c6) |
+| muse_bf16_proj | **1.115×** | 1136 | f0bd99103bf74d83 | v6_router_stacked.py (53c5c18702e1cb65) |
+| muse_attention_decode | **1.317×** | 784 | efe18d6e4b8c4fe3 | v14b_docfix.py (f9b4b6409ce588ea) |
+| muse_moe_w4a16 | **1.380×** | 705 | d625bb2af63b43c1 | v24_tuned.py (9cba0e2b…) |
+| muse_decode_layer | **~1.24×** (board 1.246×; decode-32 full is noise on an unchanged path, r5 m1) | 715 | b35042c212354b1f | v12_precompile.py (b934cc00c842f1c2) |
 | muse_prefill_layer | — | — | — | not started |
+
+Candidate in review: decode_layer v13_fused_attn.py (check 8ddcc64985b5474e, **1.278× (1.259-1.298)**), PR #5.
 
 MoE board reference (Oct 28 late): rank 50 / 300 / 500 / 700 / 800 at 2.37 / 1.97 / 1.74 / 1.38 / 1.31×.
 
-PR #1 (audit-r2-fixes) merged at e4aacf1 after audit r3 (APPROVED). Decisions: bf16 v7 not submitted (same GPU
-path as the board row); attention v12 and decode_layer v8 on HOLD (scored launches identical to the board rows).
+PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), #3 decode-moe-cuda (r5 APPROVED),
+#4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
+decode-v13-fused (base attn-fused): v13, for review.
 
-## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems`
-- Checks: MoE 6 of 20 used (v11, v12, v14, v15, v16, v17 MoE checks); attention 1; decode_layer 1; bf16 0.
-- Submits: 0 of 10 used on every problem.
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv and `okc problems` (~2:27 AM ET)
+- Checks used: bf16 11 of 20; attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20 (v8 9f17, v9-v12, v13 8ddc;
+  the re-send 9a588099434d407f of the same v13 bytes was deduplicated by the judge, "the same code as job 8ddc…",
+  and `okc problems` does not count it).
+- Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 1 (v12, b35042c212354b1f, 1.246×),
+  attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0. 9 of 10 left on each of those three, 10 on bf16.
+- Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~2:20-2:30 AM ET: decode_layer v13 (branch decode-v13-fused, off attn-fused)
+Built by tools/build_decode_v13.py (reproduces the file byte-exact) from v12_precompile.py + attention v14b.
+| check | file | speedup | note |
+|---|---|---|---|
+| 8ddcc64985b5474e | v13_fused_attn.py | **1.278x (1.259-1.298)** 13/13, score 17,694 us vs v12's 18,135 / 18,158 | v12 + v14's fused norm/RoPE/FP8-q/cache-write kernel (replaces FusedQKNorm + casts + store_cache), FP8 x FP8 Q.K in the split-KV kernels (P.V BF16), FA3 verify path fed the E4M3 q directly. RoPE table read clamped (r6 n4). SMALL_MAX / SMALL_CFG[32] removed; r4 n6 alignment assert, r4 n9 FP32 note |
+Per-shape judge speedups (v12 ff2c / v12 b350 -> v13): decode-1 sl 1.416/1.394 -> 1.428; decode-1 full 1.385/1.391 -> 1.422; decode-16 sl 1.291/1.301 -> 1.331; decode-16 full 1.239/1.241 -> 1.322; decode-32 sl 1.074/1.075 -> 1.09; decode-32 full 1.28/1.265 -> 1.266; verify-1 sl 1.361/1.361 -> 1.399; verify-1 full 1.334/1.344 -> 1.368; verify-16 sl 1.195/1.164 -> 1.22; verify-16 full 1.12/1.126 -> 1.162; verify-32 sl 1.167/1.184 -> 1.221; verify-32 full 1.111/1.127 -> 1.128.
+Next (decode_layer): decode-32 sliding (1.09x in v13's table) is still the weakest shape; see items 1-3 of the v10 notes below.
 
 ## Oct 29 ~12:20 AM ET resume (successor worker)
 - Branch moe-packed-dequant pushed (was local only). bf16 v8/v9/v10 checks: 1.061x / 0.727x / 0.769x (all
@@ -48,9 +63,7 @@ Board 1.117x (v9_regime). Attention checks this session: see the table (window t
 | ed743d60bec04ad8 | v13_fused_store.py | **1.243x (1.224-1.261)** 16/16 | one Triton program per (token, head) does RMSNorm + interleaved RoPE + q out + k/v E4M3 cast + cache-row store. It replaces FusedQKNorm + 2 casts + store_cache (4-5 launches). Decode b1 sliding 16.1 -> 12.8 us (1.58x); verify shapes 1.01-1.25x now (FA3 path gains too) |
 | ad626ebbafd94cbb | v14_fp8q.py | **1.325x (1.305-1.345)** 16/16: decode 1.63-1.88x sliding, 1.36-1.66x full; verify 1.02-1.36x | v13 + q written in E4M3 by the fused kernel (FA3 skips its cast) + FP8xFP8 QK dot in the split kernels, PV in BF16 |
 Caveat: the Triton CPU interpreter's float8e4nv conversion is wrong (2.0 -> 1.0), so cache bytes can't be checked locally. GPU tests passed 16/16.
-FOR decode_layer (next version): v8-v12 run state["qk_norm"] + k/v .to(FP8) + store_cache, the same 4-5 launches.
-Swap in v13's _norm_rope_store_kernel (it takes the same cos_sin table). With FP8 q (v14) the FA3 verify path drops a cast too. Expected
-about -3 to -5 us per decode-layer call, on every shape.
+FOR decode_layer: DONE in decode v13 (check 8ddcc64985b5474e, 1.278x): the fused kernel + FP8 q replaced qk_norm + casts + store_cache.
 Next (attention): the r2 nits (_nsplit docstring 225 keys, dead NSPLIT_P2 masking) are still open in the attention file (sent files are not edited), so fix them in v15. Fold the split combine into the split kernel (last-arriving program via an atomic counter) to save ~1-2 us per decode shape;
 fold the fused norm/RoPE into the split kernel's q load for decode (q_len 1).
 
@@ -62,7 +75,7 @@ Board decode_layer 1.202x (v6). decode checks this session: 4 (v9-v12); 5/20 in 
 | 62ed09f29fd74783 | v9_moe_cuda.py | 1.219x (1.200-1.237) | v24 experts at <=32 tokens + bf16 v17 pooler/unpooler routes. Gains at 1-16 tokens; at 32 agentic tokens moe_mma 127.5 us vs Marlin 124.3, and the cuBLAS-T unpooler lost at 128/256 |
 | d761340c8ec04009 | v10_route.py | **1.243x (1.225-1.262)** | CUDA experts at <=16 tokens only, v8 projections, Triton pre-expert RMSNorm (torch's took 6 us) |
 | 4e2d567c86e84404 | v11_rmsnorm_all.py | 1.234x | Triton RMSNorm at every token count: within noise, not carried |
-| ff2c439e12e54f31 | v12_precompile.py | see PR #3 | v10 + r4 m1 (get_function on every kernel in prepare). Candidate |
+| ff2c439e12e54f31 | v12_precompile.py | 1.247x (1.229-1.266) | v10 + r4 m1 (get_function on every kernel in prepare). SUBMITTED as b35042c212354b1f, 1.246x (quote ~1.24x, r5 m1) |
 Per shape for v10:
 - 1 token: 1.39x; 16 tokens: 1.25-1.31x; verify 8 tokens: 1.35-1.37x.
 - 32 tokens: 1.07/1.17x; 128 tokens: 1.15-1.20x; 256 tokens: 1.11-1.18x.
@@ -109,7 +122,7 @@ check b8e3f1ba63b044c5). NVRTC compiles CUDA C++ in-process (no subprocess), so 
 v23 per shape: bs1 1.753x, bs16 1.232x, bs32 1.029x, bs8 1.350x; bs128/256 stay on Marlin (1.37/1.31x).
 
 Next steps (MoE, in order):
-1. Senior Larper review of PR #2 (v24), then decide on a submit (Arman's workflow: PR -> review -> joint decision).
+1. DONE: PR #2 (v24) reviewed (r4 APPROVED) and submitted, d625bb2af63b43c1, 1.380x.
 2. bs32 is still ~1.0x: kernel is instruction-issue-bound (~26 instrs per k-step). Ideas: lop3-fused dequant,
    amortise the scale cvt across NB, use the tensor-core path for bs128/256 too (Marlin there is ~3-4x off SOL).
 3. Zero-buffer memset + silu_mul + route_prep + post-norm = 4 small launches (~8 us at bs1); fuse.
@@ -268,4 +281,36 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-10-28 22:22:28 | 9f1742cea00f4460 | muse_decode_layer | check | v8_nearest_pow2.py | ea3b88086cdef7e8 | 52ea71e | 1.193x (1.175-1.211), passed=True |
 | 2026-10-28 22:45:11 | 16374f95f195436b | muse_moe_w4a16 | check | v11_triton_packed.py | c0e08e1d71d9766b | e4b1f3d | 0.545x (0.537-0.554), passed=True |
 | 2026-10-28 22:54:47 | 698ae1d5cbd94a3a | muse_moe_w4a16 | check | v12_splitk.py | 0da91269b409c323 | 19dd489 | 0.510x (0.503-0.518), passed=True |
-| 2026-10-28 23:09:44 | e57901fe9def4655 | muse_moe_w4a16 | check | v14_slots.py | 26e907cd7893c3fe | 4b21850 | pending (profile not saved) |
+| 2026-10-28 23:09:44 | e57901fe9def4655 | muse_moe_w4a16 | check | v14_slots.py | 26e907cd7893c3fe | 4b21850 | 0.578x (0.570-0.587), passed=True |
+| 2026-10-28 23:14:56 | 4b804f6c561745bf | muse_moe_w4a16 | check | v15_tiled.py | 5e50df5e78914e6a | 4e3722f | 0.723x (0.712-0.734), passed=True |
+| 2026-10-28 23:21:57 | 603e1fdbeed64cac | muse_moe_w4a16 | check | v16_persistent.py | 2287485b0d44be2f | 7f99677 | 0.722x (0.711-0.745), passed=True |
+| 2026-10-28 23:28:02 | c8a9842f36014fa0 | muse_moe_w4a16 | check | v17_occupancy.py | 803518baac5982e1 | ef39c26 | 0.725x (0.714-0.736), passed=True |
+| 2026-10-28 23:34:11 | 3a7c57476d824e80 | muse_bf16_proj | check | v8_streamk.py | b28ab5344a71cb57 | 7f9e21c | 1.061x (1.045-1.077), passed=True |
+| 2026-10-28 23:52:17 | a31e7fe5dd184d13 | muse_bf16_proj | check | v9_zk.py | 59cb50e935a0e206 | cfc51b3 | 0.727x (0.716-0.738), passed=True |
+| 2026-10-29 00:08:07 | 633e5dfd0b494aa0 | muse_bf16_proj | check | v10_zk_occ.py | 79202623e5513664 | 6bd49df | 0.769x (0.758-0.781), passed=True |
+| 2026-10-29 00:33:05 | a428ce02220746c9 | muse_moe_w4a16 | check | v18_gemv.py | eecc105961109dcd | 4c87f91 | 0.577x (0.568-0.585), passed=True |
+| 2026-10-29 00:45:37 | e99c9700c7754496 | muse_moe_w4a16 | check | v19_gemv_rows.py | 1c0d4b62ca9b34a9 | c4a9c23 | 0.220x (0.216-0.223), passed=True |
+| 2026-10-29 00:50:26 | ae407efff6954988 | muse_bf16_proj | check | v11_cublas_bench.py | 487fb61c7bb3b01c | a084f61 | 1.132x (1.115-1.149), passed=True |
+| 2026-10-29 00:52:00 | b8e3f1ba63b044c5 | muse_bf16_proj | check | v12_bench_probe.py | d6695652c63c6fea | 87356d4 | 1.127x (1.110-1.144), passed=True |
+| 2026-10-29 00:56:41 | 8b24db54101e43dd | muse_moe_w4a16 | check | v20_cuda_gemv.py | 74ea274de62746c6 | 229448f | 0.902x (0.888-0.915), passed=True |
+| 2026-10-29 01:02:55 | 953f0d3cecdd42c1 | muse_moe_w4a16 | check | v21_mma.py | e3dab931aff74a55 | 0d353d4 | 1.046x (1.030-1.062), passed=True |
+| 2026-10-29 01:05:44 | ed185d25d2834988 | muse_moe_w4a16 | check | v22_mma_pf.py | 5f18b181ebebc738 | 7a268e2 | 1.100x (1.084-1.117), passed=True |
+| 2026-10-29 01:10:40 | b109e9378bc14d66 | muse_moe_w4a16 | check | v23_scale_nb.py | b851c2463208b408 | edb8de9 | 1.325x (1.305-1.345), passed=True |
+| 2026-10-29 01:12:07 | d66cab4599544266 | muse_moe_w4a16 | check | v24_tuned.py | 9cba0e2bb6a650d8 | 628e860 | 1.376x (1.356-1.397), passed=True |
+| 2026-10-29 01:16:38 | cdcf4c435dce475a | muse_bf16_proj | check | v13_cuda_gemv.py | 6f48f700322f488c | 03a51f6 | pending (profile not saved) |
+| 2026-10-29 01:18:19 | ee8f8ee6204d4b78 | muse_bf16_proj | check | v14_route.py | 45a6b07a07fa7bf7 | a7ee222 | 1.109x (1.092-1.125), passed=True |
+| 2026-10-29 01:21:10 | e2894d15903941b8 | muse_bf16_proj | check | v15_cpasync.py | 8f52465c334fec20 | 61a50e9 | 0.681x (0.671-0.691), passed=True |
+| 2026-10-29 01:23:08 | 693c8d31f9134635 | muse_bf16_proj | check | v16_l2pf.py | b1f4f0190cc44832 | 515afa4 | 1.009x (0.994-1.024), passed=True |
+| 2026-10-29 01:24:37 | febf8e4adb9c4e1a | muse_bf16_proj | check | v17_best_route.py | 9f56573b6e19ab58 | 8d34c13 | 1.133x (1.116-1.150), passed=True |
+| 2026-10-29 01:26:41 | 14ba8a134b084788 | muse_bf16_proj | check | v18_dbuf.py | 7b8931a7ca240b66 | e8d5883 | 1.062x (1.046-1.078), passed=True |
+| 2026-10-29 01:29:24 | 62ed09f29fd74783 | muse_decode_layer | check | v9_moe_cuda.py | 02e16cae04881ead | d63231f | 1.219x (1.200-1.237), passed=True |
+| 2026-10-29 01:32:33 | d761340c8ec04009 | muse_decode_layer | check | v10_route.py | 769b1e5f6b700466 | dd570f2 | 1.243x (1.225-1.262), passed=True |
+| 2026-10-29 01:34:10 | d625bb2af63b43c1 | muse_moe_w4a16 | submit | v24_tuned.py | 9cba0e2bb6a650d8 | dd570f2 | 1.380x (1.359-1.401), passed=True |
+| 2026-10-29 01:34:57 | 4e2d567c86e84404 | muse_decode_layer | check | v11_rmsnorm_all.py | 4db52119f88eda1e | ea3b527 | 1.234x (1.216-1.253), passed=True |
+| 2026-10-29 01:37:27 | ff2c439e12e54f31 | muse_decode_layer | check | v12_precompile.py | b934cc00c842f1c2 | c4c326c | 1.247x (1.229-1.266), passed=True |
+| 2026-10-29 01:42:33 | ed743d60bec04ad8 | muse_attention_decode | check | v13_fused_store.py | 946f38729b14889d | a152f37 | 1.243x (1.224-1.261), passed=True |
+| 2026-10-29 01:48:32 | ad626ebbafd94cbb | muse_attention_decode | check | v14_fp8q.py | e893f8b43b7cf33a | 4047bb7 | 1.325x (1.305-1.345), passed=True |
+| 2026-10-29 01:54:42 | b35042c212354b1f | muse_decode_layer | submit | v12_precompile.py | b934cc00c842f1c2 | f2c065f | 1.246x (1.227-1.264), passed=True |
+| 2026-10-29 02:16:03 | efe18d6e4b8c4fe3 | muse_attention_decode | submit | v14b_docfix.py | f9b4b6409ce588ea | 77808d1 | 1.317x (1.297-1.336), passed=True |
+| 2026-10-29 02:23:06 | 8ddcc64985b5474e | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 926c76a | 1.278x (1.259-1.298), passed=True |
+| 2026-10-29 02:25:43 | 9a588099434d407f | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 7675026 | pending (profile not saved) |
