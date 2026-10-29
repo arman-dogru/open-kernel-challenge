@@ -1,0 +1,862 @@
+{
+  "benchmarks": [
+    {
+      "baseline_ns": 985343.9736180007,
+      "baseline_parent_ns": 994736.0218502581,
+      "baseline_raw_ns": 989727.9739379883,
+      "baseline_runs_ns": [
+        965664,
+        1011200,
+        1015616,
+        968256,
+        1013792,
+        939616
+      ],
+      "baseline_stats": {
+        "best_ns": 939616.0244941711,
+        "err_ns": 13119.764185636692,
+        "mean_ns": 985690.6831264496,
+        "runs": 6,
+        "std_ns": 32136.727800451168,
+        "worst_ns": 1015616.0593032837
+      },
+      "best_ns": 938463.9859199524,
+      "case": {
+        "batch": 1,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "turn 1",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019717211073593571,
+        "weight": 46
+      },
+      "err_ns": 12645.465781066998,
+      "event": "benchmark",
+      "event_median_ns": 990032.0172309875,
+      "index": 0,
+      "mean_ns": 984896.0041999817,
+      "median_ns": 983618.453915026,
+      "median_raw_ns": 990032.0172309875,
+      "outside_bursts_ns": [
+        934809.7,
+        932226.6,
+        953223.1
+      ],
+      "outside_ns": 932226.6,
+      "paired_ratio": 1.0017542571472777,
+      "parent_ns": 994351.9891239703,
+      "parent_runs_ns": [
+        974192,
+        1016208,
+        1015344,
+        972976,
+        1014512,
+        941168
+      ],
+      "ratios": [
+        0.99797,
+        0.99898,
+        1.00458,
+        0.99894,
+        1.00299,
+        1.00123
+      ],
+      "replay_overhead": {
+        "gate_ns": 296623.9987872541,
+        "one_ns": 5472.000222653151,
+        "overhead_ns": 4384.0003199875355,
+        "parent_one_ns": 302015.9900188446,
+        "parent_two_ns": 303200.00648498535,
+        "two_ns": 6560.000125318766
+      },
+      "runs": 6,
+      "runs_ns": [
+        967616,
+        1012224,
+        1011008,
+        969280,
+        1010784,
+        938464
+      ],
+      "speed_of_light_ns": 256950.95121536904,
+      "speedup": 1.0017542571472777,
+      "speedup_of_medians": 0.9996915295442361,
+      "status": "pass",
+      "std_ns": 30974.938723439278,
+      "worst_ns": 1012223.9589691162
+    },
+    {
+      "baseline_ns": 1408016.0069279373,
+      "baseline_parent_ns": 1417007.943848148,
+      "baseline_raw_ns": 1412400.0072479248,
+      "baseline_runs_ns": [
+        1445600,
+        1380032,
+        1425568,
+        1399232,
+        1361920,
+        1464640
+      ],
+      "baseline_stats": {
+        "best_ns": 1361919.9991226196,
+        "err_ns": 16096.433444046534,
+        "mean_ns": 1412832.001845042,
+        "runs": 6,
+        "std_ns": 39428.048616584085,
+        "worst_ns": 1464640.0213241577
+      },
+      "best_ns": 1358047.9621887207,
+      "case": {
+        "batch": 1,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "full",
+        "load": "turn 1",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019817065581048832,
+        "weight": 16
+      },
+      "err_ns": 16507.42255987132,
+      "event": "benchmark",
+      "event_median_ns": 1411311.9840621948,
+      "index": 1,
+      "mean_ns": 1410815.993944804,
+      "median_ns": 1406931.4301963304,
+      "median_raw_ns": 1411311.9840621948,
+      "outside_bursts_ns": [
+        1457818.05,
+        1459255.55,
+        1469408.85
+      ],
+      "outside_ns": 1457818.05,
+      "paired_ratio": 1.0007708810168918,
+      "parent_ns": 1414655.944565311,
+      "parent_runs_ns": [
+        1452720,
+        1378224,
+        1428112,
+        1401200,
+        1361200,
+        1462896
+      ],
+      "ratios": [
+        0.99803,
+        1.0031,
+        1.00104,
+        1.00051,
+        1.00286,
+        1.00319
+      ],
+      "replay_overhead": {
+        "gate_ns": 297968.0092539638,
+        "one_ns": 5280.000157654285,
+        "overhead_ns": 4384.0003199875355,
+        "parent_one_ns": 303072.0055103302,
+        "parent_two_ns": 304255.99217414856,
+        "two_ns": 6175.999995321035
+      },
+      "runs": 6,
+      "runs_ns": [
+        1448448,
+        1375776,
+        1424096,
+        1398528,
+        1358048,
+        1460000
+      ],
+      "speed_of_light_ns": 496692.6391911021,
+      "speedup": 1.0007708810168918,
+      "speedup_of_medians": 1.0007733325360664,
+      "status": "pass",
+      "std_ns": 40434.76224019242,
+      "worst_ns": 1460000.0381469727
+    },
+    {
+      "baseline_ns": 3266927.967313677,
+      "baseline_parent_ns": 3275599.98142533,
+      "baseline_raw_ns": 3271183.967590332,
+      "baseline_runs_ns": [
+        3253056,
+        3253728,
+        3287616,
+        3343616,
+        3254752,
+        3315328
+      ],
+      "baseline_stats": {
+        "best_ns": 3253056.049346924,
+        "err_ns": 15572.584742760178,
+        "mean_ns": 3284682.6314926147,
+        "runs": 6,
+        "std_ns": 38144.88659601287,
+        "worst_ns": 3343616.008758545
+      },
+      "best_ns": 3232863.9030456543,
+      "case": {
+        "batch": 4,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "turn 4",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019916920088504094,
+        "weight": 46
+      },
+      "err_ns": 15038.899042710154,
+      "event": "benchmark",
+      "event_median_ns": 3259584.069252014,
+      "index": 2,
+      "mean_ns": 3271157.3441823325,
+      "median_ns": 3252073.954831481,
+      "median_raw_ns": 3259584.069252014,
+      "outside_bursts_ns": [
+        3298437.5833333335,
+        3357596.9166666665,
+        3670891.1666666665
+      ],
+      "outside_ns": 3298437.5833333335,
+      "paired_ratio": 1.004567550642607,
+      "parent_ns": 3263135.9349470586,
+      "parent_runs_ns": [
+        3237264,
+        3247024,
+        3276688,
+        3324656,
+        3249584,
+        3311696
+      ],
+      "ratios": [
+        1.00625,
+        1.00288,
+        1.00454,
+        1.00646,
+        1.00258,
+        1.00211
+      ],
+      "replay_overhead": {
+        "gate_ns": 298191.99931807816,
+        "one_ns": 5344.000179320574,
+        "overhead_ns": 4256.000276654959,
+        "parent_one_ns": 303584.0094089508,
+        "parent_two_ns": 304704.0104866028,
+        "two_ns": 6432.000081986189
+      },
+      "runs": 6,
+      "runs_ns": [
+        3232864,
+        3244384,
+        3272768,
+        3322176,
+        3246400,
+        3308352
+      ],
+      "speed_of_light_ns": 1036277.2319514662,
+      "speedup": 1.004567550642607,
+      "speedup_of_medians": 1.003563357699296,
+      "status": "pass",
+      "std_ns": 36837.628947870275,
+      "worst_ns": 3322175.979614258
+    },
+    {
+      "baseline_ns": 4855487.9683069885,
+      "baseline_parent_ns": 4863936.100155115,
+      "baseline_raw_ns": 4859807.968139648,
+      "baseline_runs_ns": [
+        4900800,
+        4830240,
+        4760288,
+        4928064,
+        4781056,
+        4889376
+      ],
+      "baseline_stats": {
+        "best_ns": 4760287.761688232,
+        "err_ns": 27928.415132706436,
+        "mean_ns": 4848303.95380656,
+        "runs": 6,
+        "std_ns": 68410.3663997549,
+        "worst_ns": 4928063.869476318
+      },
+      "best_ns": 4742847.919464111,
+      "case": {
+        "batch": 4,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "full",
+        "load": "turn 4",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4020016774595959357,
+        "weight": 16
+      },
+      "err_ns": 27337.017247702242,
+      "event": "benchmark",
+      "event_median_ns": 4851583.957672119,
+      "index": 3,
+      "mean_ns": 4832341.353098552,
+      "median_ns": 4841117.8606838295,
+      "median_raw_ns": 4851583.957672119,
+      "outside_bursts_ns": [
+        4881422.125,
+        5190619,
+        5199725.125
+      ],
+      "outside_ns": 4881422.125,
+      "paired_ratio": 1.0029683449229492,
+      "parent_ns": 4854976.091533899,
+      "parent_runs_ns": [
+        4882016,
+        4828832,
+        4747424,
+        4910976,
+        4766816,
+        4881120
+      ],
+      "ratios": [
+        1.00479,
+        1.00094,
+        1.00368,
+        1.00448,
+        1.00371,
+        1.00223
+      ],
+      "replay_overhead": {
+        "gate_ns": 298112.00127005577,
+        "one_ns": 5247.999913990498,
+        "overhead_ns": 4319.99983265996,
+        "parent_one_ns": 303167.99879074097,
+        "parent_two_ns": 304448.0085372925,
+        "two_ns": 6175.999995321035
+      },
+      "runs": 6,
+      "runs_ns": [
+        4877472,
+        4825696,
+        4742848,
+        4906112,
+        4763392,
+        4878528
+      ],
+      "speed_of_light_ns": 1992419.5081577352,
+      "speedup": 1.0029683449229492,
+      "speedup_of_medians": 1.0016966293849603,
+      "status": "pass",
+      "std_ns": 66961.74334653346,
+      "worst_ns": 4906112.194061279
+    },
+    {
+      "baseline_ns": 18630752.27336958,
+      "baseline_parent_ns": 18640528.383431956,
+      "baseline_raw_ns": 18634752.27355957,
+      "baseline_runs_ns": [
+        18618656,
+        18574240,
+        18771809,
+        18657057,
+        18650848,
+        18501696
+      ],
+      "baseline_stats": {
+        "best_ns": 18501695.63293457,
+        "err_ns": 36955.33710948733,
+        "mean_ns": 18629050.890604656,
+        "runs": 6,
+        "std_ns": 90521.71919078376,
+        "worst_ns": 18771808.624267578
+      },
+      "best_ns": 17484960.556030273,
+      "case": {
+        "batch": 1,
+        "ctx": 0,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020216483610869886,
+        "weight": 16
+      },
+      "err_ns": 118135.3386889889,
+      "event": "benchmark",
+      "event_median_ns": 17522255.897521973,
+      "index": 4,
+      "mean_ns": 17633717.219034832,
+      "median_ns": 17571033.47787508,
+      "median_raw_ns": 17522255.897521973,
+      "outside_bursts_ns": [
+        17675661.5,
+        18079208,
+        18296652
+      ],
+      "outside_ns": 17675661.5,
+      "paired_ratio": 1.0603105558263757,
+      "parent_ns": 17526623.430429026,
+      "parent_runs_ns": [
+        17546512,
+        17539983,
+        18243152,
+        17488048,
+        17513263,
+        17510576
+      ],
+      "ratios": [
+        1.06141,
+        1.05921,
+        1.03013,
+        1.06705,
+        1.06527,
+        1.05675
+      ],
+      "replay_overhead": {
+        "gate_ns": 298095.9985870868,
+        "one_ns": 5344.000179320574,
+        "overhead_ns": 4000.000189989805,
+        "parent_one_ns": 303552.0017147064,
+        "parent_two_ns": 304735.9883785248,
+        "two_ns": 6688.000168651342
+      },
+      "runs": 6,
+      "runs_ns": [
+        17541632,
+        17536160,
+        18222879,
+        17484961,
+        17508352,
+        17508320
+      ],
+      "speed_of_light_ns": 5518431.777650151,
+      "speedup": 1.0603105558263757,
+      "speedup_of_medians": 1.063504973472104,
+      "status": "pass",
+      "std_ns": 289371.300378895,
+      "worst_ns": 18222879.40979004
+    },
+    {
+      "baseline_ns": 17161056.332290173,
+      "baseline_parent_ns": 17169760.62930189,
+      "baseline_raw_ns": 17164992.332458496,
+      "baseline_runs_ns": [
+        17235041,
+        16990561,
+        17523457,
+        17001345,
+        17167040,
+        17162945
+      ],
+      "baseline_stats": {
+        "best_ns": 16990560.53161621,
+        "err_ns": 79426.22319426152,
+        "mean_ns": 17180064.519246418,
+        "runs": 6,
+        "std_ns": 194553.7190223509,
+        "worst_ns": 17523456.573486328
+      },
+      "best_ns": 16530752.182006836,
+      "case": {
+        "batch": 1,
+        "ctx": 32768,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020316338118325152,
+        "weight": 138
+      },
+      "err_ns": 42654.69945073894,
+      "event": "benchmark",
+      "event_median_ns": 16570688.247680664,
+      "index": 5,
+      "mean_ns": 16612917.58219401,
+      "median_ns": 16599074.64201329,
+      "median_raw_ns": 16570688.247680664,
+      "outside_bursts_ns": [
+        16584943,
+        16904414.5,
+        17213635.5
+      ],
+      "outside_ns": 16584943,
+      "paired_ratio": 1.0338562059871983,
+      "parent_ns": 16573280.25973402,
+      "parent_runs_ns": [
+        16584865,
+        16561696,
+        16805793,
+        16535840,
+        16681344,
+        16532737
+      ],
+      "ratios": [
+        1.03942,
+        1.02602,
+        1.04328,
+        1.02832,
+        1.02948,
+        1.03825
+      ],
+      "replay_overhead": {
+        "gate_ns": 298688.0096141249,
+        "one_ns": 5152.000114321709,
+        "overhead_ns": 3936.000168323517,
+        "parent_one_ns": 303391.9930458069,
+        "parent_two_ns": 305088.01341056824,
+        "two_ns": 6368.0000603199005
+      },
+      "runs": 6,
+      "runs_ns": [
+        16581600,
+        16559776,
+        16796608,
+        16533184,
+        16675585,
+        16530752
+      ],
+      "speed_of_light_ns": 5663353.674806875,
+      "speedup": 1.0338562059871983,
+      "speedup_of_medians": 1.0358733006867458,
+      "status": "pass",
+      "std_ns": 104482.24878608428,
+      "worst_ns": 16796607.971191406
+    },
+    {
+      "baseline_ns": 21473407.35141188,
+      "baseline_parent_ns": 21484480.675775558,
+      "baseline_raw_ns": 21477471.351623535,
+      "baseline_runs_ns": [
+        21551071,
+        22524736,
+        21403872,
+        21805216,
+        21039520,
+        21386721
+      ],
+      "baseline_stats": {
+        "best_ns": 21039520.263671875,
+        "err_ns": 207820.31057298966,
+        "mean_ns": 21618522.64404297,
+        "runs": 6,
+        "std_ns": 509053.7190905526,
+        "worst_ns": 22524736.404418945
+      },
+      "best_ns": 20751455.307006836,
+      "case": {
+        "batch": 1,
+        "ctx": 32768,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020416192625780419,
+        "weight": 16
+      },
+      "err_ns": 113515.0565269373,
+      "event": "benchmark",
+      "event_median_ns": 20904160.499572754,
+      "index": 6,
+      "mean_ns": 21016400.0193278,
+      "median_ns": 21046387.867778916,
+      "median_raw_ns": 20904160.499572754,
+      "outside_bursts_ns": [
+        20923333,
+        21267420,
+        21664516
+      ],
+      "outside_ns": 20923333,
+      "paired_ratio": 1.0202894428400566,
+      "parent_ns": 20907712.754327804,
+      "parent_runs_ns": [
+        20951105,
+        21203359,
+        21505119,
+        20864321,
+        20755457,
+        20851520
+      ],
+      "ratios": [
+        1.02883,
+        1.06257,
+        0.99591,
+        1.04527,
+        1.01388,
+        1.02584
+      ],
+      "replay_overhead": {
+        "gate_ns": 298464.00348469615,
+        "one_ns": 5344.000179320574,
+        "overhead_ns": 4064.0002116560936,
+        "parent_one_ns": 303808.0036640167,
+        "parent_two_ns": 305247.9922771454,
+        "two_ns": 6624.000146985054
+      },
+      "runs": 6,
+      "runs_ns": [
+        20947201,
+        21198689,
+        21491743,
+        20861120,
+        20751455,
+        20848192
+      ],
+      "speed_of_light_ns": 7710004.388626896,
+      "speedup": 1.0202894428400566,
+      "speedup_of_medians": 1.0274310145921244,
+      "status": "pass",
+      "std_ns": 278053.96661418554,
+      "worst_ns": 21491743.087768555
+    },
+    {
+      "baseline_ns": 24962848.39231521,
+      "baseline_parent_ns": 24976319.44087334,
+      "baseline_raw_ns": 24967424.392700195,
+      "baseline_runs_ns": [
+        26103680,
+        24670113,
+        25465631,
+        24542751,
+        24393215,
+        25264736
+      ],
+      "baseline_stats": {
+        "best_ns": 24393215.17944336,
+        "err_ns": 268254.31763930735,
+        "mean_ns": 25073354.4031779,
+        "runs": 6,
+        "std_ns": 657086.1995147838,
+        "worst_ns": 26103679.656982422
+      },
+      "best_ns": 24227487.564086914,
+      "case": {
+        "batch": 1,
+        "ctx": 65536,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020615901640690956,
+        "weight": 16
+      },
+      "err_ns": 173757.30864351784,
+      "event": "benchmark",
+      "event_median_ns": 24699456.214904785,
+      "index": 7,
+      "mean_ns": 24686821.619669598,
+      "median_ns": 24458796.813556395,
+      "median_raw_ns": 24699456.214904785,
+      "outside_bursts_ns": [
+        24703675,
+        24935526,
+        25803260
+      ],
+      "outside_ns": 24703675,
+      "paired_ratio": 1.0206081919156154,
+      "parent_ns": 24704896.10102959,
+      "parent_runs_ns": [
+        25362559,
+        24244289,
+        24774432,
+        24230144,
+        24912929,
+        24635360
+      ],
+      "ratios": [
+        1.02969,
+        1.01768,
+        1.02826,
+        1.01302,
+        0.97957,
+        1.02565
+      ],
+      "replay_overhead": {
+        "gate_ns": 297983.9954059571,
+        "one_ns": 5280.000157654285,
+        "overhead_ns": 4576.000384986401,
+        "parent_one_ns": 303232.01417922974,
+        "parent_two_ns": 303999.99022483826,
+        "two_ns": 5983.99993032217
+      },
+      "runs": 6,
+      "runs_ns": [
+        25351072,
+        24241665,
+        24765921,
+        24227488,
+        24901793,
+        24632992
+      ],
+      "speed_of_light_ns": 9847682.949824065,
+      "speedup": 1.0206081919156154,
+      "speedup_of_medians": 1.010851163296506,
+      "status": "pass",
+      "std_ns": 425616.74525590776,
+      "worst_ns": 25351072.311401367
+    }
+  ],
+  "job_id": "b007869e4f7e48ef",
+  "problem": "muse_prefill_layer",
+  "profiles": [
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "turn 1",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019717211073593571,
+        "weight": 46
+      },
+      "event": "profile",
+      "index": 0,
+      "report": "kernel                                                           GPU time  share  calls\nvoid sglang::device::marlin_moe::Marlin\u003c__nv_bfloat16, 56...     684.0 µs  65.4%      2\nnvjet_sm90_tst_128x192_64x5_2x1_v_bz_coopB_TNN                   156.0 µs  14.9%      3\nnvjet_sm90_tst_112x128_64x7_1x2_h_bz_TNN                          39.8 µs   3.8%      1\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...      25.5 µs   2.4%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      22.1 µs   2.1%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      21.0 µs   2.0%      1\nnvjet_sm90_tss_64x96_64x10_2x1_v_bz_splitK_NNT                    17.9 µs   1.7%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...      14.8 µs   1.4%      1\n_post_expert_norm_weighted_sum_kernel                              8.4 µs   0.8%      1\nvoid cutlass::device_kernel\u003cflash::FlashAttnFwdCombine\u003ccu...       7.0 µs   0.7%      1\nvoid at::native::(anonymous namespace)::vectorized_layer_...       6.4 µs   0.6%      1\nvoid count_and_sort_expert_tokens_kernel\u003cint\u003e(int const*,...       5.2 µs   0.5%      1\n... 14 more\ntotal                                                           1045.6 µs"
+    },
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "full",
+        "load": "turn 1",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019817065581048832,
+        "weight": 16
+      },
+      "event": "profile",
+      "index": 1,
+      "report": "kernel                                                           GPU time  share  calls\nvoid sglang::device::marlin_moe::Marlin\u003c__nv_bfloat16, 56...     637.9 µs  43.6%      2\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...     419.0 µs  28.6%      1\nnvjet_sm90_tst_128x192_64x5_2x1_v_bz_coopB_TNN                   166.1 µs  11.4%      3\nvoid cublasLt::splitKreduce_kernel\u003c32, 16, int, float, fl...      66.7 µs   4.6%      1\nnvjet_sm90_tst_112x128_64x7_1x2_h_bz_TNN                          39.5 µs   2.7%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      21.7 µs   1.5%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      21.2 µs   1.5%      1\nnvjet_sm90_tss_64x96_64x10_2x1_v_bz_splitK_NNT                    14.2 µs   1.0%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...      14.0 µs   1.0%      1\n_post_expert_norm_weighted_sum_kernel                              8.4 µs   0.6%      1\nvoid at::native::(anonymous namespace)::vectorized_layer_...       7.0 µs   0.5%      1\nvoid cutlass::device_kernel\u003cflash::FlashAttnFwdCombine\u003ccu...       6.9 µs   0.5%      1\n... 14 more\ntotal                                                           1462.8 µs\nGPU busy (kernels overlap: PDL or streams)                      1380.7 µs\nan overlapping kernel's time includes any wait for the one before it, so the rows add up to more"
+    },
+    {
+      "case": {
+        "batch": 4,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "turn 4",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4019916920088504094,
+        "weight": 46
+      },
+      "event": "profile",
+      "index": 2,
+      "report": "kernel                                                           GPU time  share  calls\nvoid sglang::device::marlin_moe::Marlin\u003c__nv_bfloat16, 56...    2230.6 µs  63.9%      2\nnvjet_sm90_tst_256x152_64x4_1x2_h_bz_coopA_TNT                   331.3 µs   9.5%      2\nnvjet_sm90_tst_128x256_64x4_2x1_v_bz_coopA_TNN                   261.8 µs   7.5%      1\nnvjet_sm90_tst_192x144_64x5_1x2_h_bz_coopB_TNT                   154.6 µs   4.4%      1\nnvjet_sm90_tss_128x104_64x7_4x2_h_bz_NNT                         125.4 µs   3.6%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      78.8 µs   2.3%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      77.2 µs   2.2%      1\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...      62.5 µs   1.8%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...      53.2 µs   1.5%      1\n_post_expert_norm_weighted_sum_kernel                             22.7 µs   0.7%      1\nvoid at::native::(anonymous namespace)::vectorized_layer_...      18.3 µs   0.5%      1\nvoid count_and_sort_expert_tokens_kernel\u003cint\u003e(int const*,...      17.7 µs   0.5%      1\n... 14 more\ntotal                                                           3491.1 µs\nGPU busy (kernels overlap: PDL or streams)                      3402.0 µs\nan overlapping kernel's time includes any wait for the one before it, so the rows add up to more"
+    },
+    {
+      "case": {
+        "batch": 4,
+        "ctx": 80000,
+        "dist": "soft",
+        "layer": "full",
+        "load": "turn 4",
+        "page": 1,
+        "q_len": 753,
+        "repeats": 6,
+        "seed": 4020016774595959357,
+        "weight": 16
+      },
+      "event": "profile",
+      "index": 3,
+      "report": "kernel                                                           GPU time  share  calls\nvoid sglang::device::marlin_moe::Marlin\u003c__nv_bfloat16, 56...    2074.0 µs  42.3%      2\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...    1627.9 µs  33.2%      1\nnvjet_sm90_tst_256x152_64x4_1x2_h_bz_coopA_TNT                   328.8 µs   6.7%      2\nnvjet_sm90_tst_128x256_64x4_2x1_v_bz_coopA_TNN                   299.3 µs   6.1%      1\nnvjet_sm90_tst_192x144_64x5_1x2_h_bz_coopB_TNT                   152.9 µs   3.1%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      78.6 µs   1.6%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...      77.1 µs   1.6%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...      52.7 µs   1.1%      1\nnvjet_sm90_tss_128x104_64x7_4x2_h_bz_NNT                          40.6 µs   0.8%      1\nvoid sglang::muse_spark::routing_kernel\u003csglang::muse_spar...      32.0 µs   0.7%      1\nvoid at::native::elementwise_kernel\u003c128, 2, at::native::g...      30.2 µs   0.6%      1\n_post_expert_norm_weighted_sum_kernel                             24.0 µs   0.5%      1\n... 14 more\ntotal                                                           4901.1 µs\nGPU busy (kernels overlap: PDL or streams)                      4801.5 µs\nan overlapping kernel's time includes any wait for the one before it, so the rows add up to more"
+    },
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 0,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020216483610869886,
+        "weight": 16
+      },
+      "event": "profile",
+      "index": 4,
+      "report": "kernel                                                           GPU time  share  calls\n_ZN7cutlass13device_kernelIN2at4cuda6detail25enable_3x_ke...    4790.2 µs  26.8%      2\n_nvfp4_dequant_kernel                                           3244.9 µs  18.2%      2\nnvjet_sm90_tst_192x192_64x4_2x1_v_bz_coopB_TNN                  2628.1 µs  14.7%      3\nvoid at::native::index_elementwise_kernel\u003c128, 4, at::nat...    2432.1 µs  13.6%      1\nnvjet_sm90_tst_320x128_64x3_1x2_h_bz_coopB_TNT                  1436.5 µs   8.0%      1\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...     906.8 µs   5.1%      1\nvoid at::native::vectorized_gather_kernel\u003c16, long\u003e(char*...     475.3 µs   2.7%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     405.5 µs   2.3%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     398.2 µs   2.2%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...     343.0 µs   1.9%      1\nnvjet_sm90_tss_256x128_64x4_1x2_h_bz_coopA_NNT                   292.8 µs   1.6%      1\n_post_expert_norm_weighted_sum_kernel                            129.1 µs   0.7%      1\n... 27 more\ntotal                                                          17855.2 µs"
+    },
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 32768,
+        "dist": "soft",
+        "layer": "sliding",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020316338118325152,
+        "weight": 138
+      },
+      "event": "profile",
+      "index": 5,
+      "report": "kernel                                                           GPU time  share  calls\n_ZN7cutlass13device_kernelIN2at4cuda6detail25enable_3x_ke...    4507.5 µs  26.6%      2\n_nvfp4_dequant_kernel                                           3235.8 µs  19.1%      2\nnvjet_sm90_tst_192x192_64x4_2x1_v_bz_coopB_TNN                  2620.3 µs  15.4%      3\nvoid at::native::index_elementwise_kernel\u003c128, 4, at::nat...    2421.5 µs  14.3%      1\nnvjet_sm90_tst_320x128_64x3_1x2_h_bz_coopB_TNT                  1533.9 µs   9.0%      1\nvoid at::native::vectorized_gather_kernel\u003c16, long\u003e(char*...     469.8 µs   2.8%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     402.5 µs   2.4%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     399.6 µs   2.4%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...     331.4 µs   2.0%      1\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...     304.3 µs   1.8%      1\nnvjet_sm90_tss_256x128_64x4_1x2_h_bz_coopA_NNT                   182.0 µs   1.1%      1\n_post_expert_norm_weighted_sum_kernel                            121.8 µs   0.7%      1\n... 27 more\ntotal                                                          16962.4 µs\nGPU busy (kernels overlap: PDL or streams)                     16782.7 µs\nan overlapping kernel's time includes any wait for the one before it, so the rows add up to more"
+    },
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 32768,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020416192625780419,
+        "weight": 16
+      },
+      "event": "profile",
+      "index": 6,
+      "report": "kernel                                                           GPU time  share  calls\n_ZN7cutlass13device_kernelIN2at4cuda6detail25enable_3x_ke...    4611.4 µs  21.7%      2\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...    4493.4 µs  21.1%      1\n_nvfp4_dequant_kernel                                           3265.1 µs  15.3%      2\nnvjet_sm90_tst_192x192_64x4_2x1_v_bz_coopB_TNN                  2617.3 µs  12.3%      3\nvoid at::native::index_elementwise_kernel\u003c128, 4, at::nat...    2459.3 µs  11.6%      1\nnvjet_sm90_tst_320x128_64x3_1x2_h_bz_coopB_TNT                  1433.2 µs   6.7%      1\nvoid at::native::vectorized_gather_kernel\u003c16, long\u003e(char*...     474.0 µs   2.2%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     403.1 µs   1.9%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     398.0 µs   1.9%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...     338.7 µs   1.6%      1\nnvjet_sm90_tss_256x128_64x4_1x2_h_bz_coopA_NNT                   296.0 µs   1.4%      1\n_post_expert_norm_weighted_sum_kernel                            124.4 µs   0.6%      1\n... 27 more\ntotal                                                          21283.7 µs"
+    },
+    {
+      "case": {
+        "batch": 1,
+        "ctx": 65536,
+        "dist": "soft",
+        "layer": "full",
+        "load": "first turn",
+        "page": 1,
+        "q_len": 16384,
+        "repeats": 6,
+        "seed": 4020615901640690956,
+        "weight": 16
+      },
+      "event": "profile",
+      "index": 7,
+      "report": "kernel                                                           GPU time  share  calls\nvoid cutlass::device_kernel\u003cflash::enable_sm90_or_later\u003cf...    8077.9 µs  32.4%      1\n_ZN7cutlass13device_kernelIN2at4cuda6detail25enable_3x_ke...    4683.5 µs  18.8%      2\n_nvfp4_dequant_kernel                                           3272.5 µs  13.1%      2\nnvjet_sm90_tst_192x192_64x4_2x1_v_bz_coopB_TNN                  2626.7 µs  10.5%      3\nvoid at::native::index_elementwise_kernel\u003c128, 4, at::nat...    2456.5 µs   9.8%      1\nnvjet_sm90_tst_320x128_64x3_1x2_h_bz_coopB_TNT                  1440.5 µs   5.8%      1\nvoid at::native::vectorized_gather_kernel\u003c16, long\u003e(char*...     471.3 µs   1.9%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     404.7 µs   1.6%      1\nvoid sglang::muse_spark_norm_residual_kernel\u003c8192l, 512, ...     398.7 µs   1.6%      1\nvoid sglang::act_and_mul_kernel\u003c__nv_bfloat16, (sglang::A...     332.5 µs   1.3%      1\nnvjet_sm90_tss_256x128_64x4_1x2_h_bz_coopA_NNT                   295.0 µs   1.2%      1\n_post_expert_norm_weighted_sum_kernel                            122.1 µs   0.5%      1\n... 27 more\ntotal                                                          24950.6 µs"
+    }
+  ],
+  "submission": "/workspace/open-kernel-challenge/muse_prefill_layer/runs/v2_dequant_grouped.py",
+  "summary": {
+    "error": null,
+    "passed": true,
+    "score_us": 382520.4435159183,
+    "speedup": 1.0127665241606323,
+    "speedup_ci": [
+      0.9975750262982228,
+      1.0279580220230418
+    ],
+    "status": "ok",
+    "tests": 5,
+    "tests_passed": 5
+  }
+}
