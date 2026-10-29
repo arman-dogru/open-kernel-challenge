@@ -50,7 +50,7 @@ check b8e3f1ba63b044c5). NVRTC compiles CUDA C++ in-process (no subprocess), so 
 | 953f0d3cecdd42c1 | v21_mma.py | 1.046x | tensor-core mma.sync m16n8k16 NVFP4 x BF16, A-fragment repack; correct first try |
 | ed185d25d2834988 | v22_mma_pf.py | 1.100x | weight prefetch + silu_mul kernel; prefetch depth did not matter (issue-bound) |
 | b109e9378bc14d66 | v23_scale_nb.py | **1.325x (1.305-1.345)** | scale path 14 -> 5 ops (cvt chain); NB param; beats board 1.270x (CIs disjoint) |
-| d66cab4599544266 | v24_tuned.py | see below | v23 + SMALL_CFG from v23's bench (NB=1), BENCH off: the submit candidate |
+| d66cab4599544266 | v24_tuned.py | **1.376x (1.356-1.397)** 5/5 | bs1 1.775 bs8 1.398 bs16 1.368 bs32 1.100; v23 + SMALL_CFG from v23's bench (NB=1), BENCH off: the submit candidate |
 v23 per shape: bs1 1.753x, bs16 1.232x, bs32 1.029x, bs8 1.350x; bs128/256 stay on Marlin (1.37/1.31x).
 
 Next steps (MoE, in order):
