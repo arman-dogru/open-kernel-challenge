@@ -38,3 +38,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 01:42:33	check	ed743d60bec04ad8	muse_attention_decode	muse_attention_decode/runs/v13_fused_store.py	946f38729b14889d22c2ae086670ec1b0fcc80f4f40077f1055b3baad4aa3054	a152f37
 2026-10-29 01:48:32	check	ad626ebbafd94cbb	muse_attention_decode	muse_attention_decode/runs/v14_fp8q.py	e893f8b43b7cf33a2bc58d1dae2e517ad8b70a09e1ab900f136f6083eaf791d3	4047bb7
 2026-10-29 01:54:42	submit	b35042c212354b1f	muse_decode_layer	muse_decode_layer/runs/v12_precompile.py	b934cc00c842f1c2db0a98d68ff9fef7deda5ee7c70c48cb95a558690ef5c14c	f2c065f
+2026-10-29 02:16:03	submit	efe18d6e4b8c4fe3	muse_attention_decode	muse_attention_decode/runs/v14b_docfix.py	f9b4b6409ce588ea104d4a8152625154cbca4f5a9da8c1e42f50249202d318e1	77808d1
