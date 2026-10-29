@@ -22,6 +22,18 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Oct 29 ~3:40-3:45 PM ET: prefill v2b and decode v19 submitted (review round 13 approvals of #16 / #17)
+- prefill_layer v2b_dequant_grouped.py (sha d0b2cc11..., sent at 99e0c27): submit 7b69b2fcfffb40dd, **1.088x (1.072-1.105)**,
+  5/5 tests. First prefill board entry. Per TASK.md, prefill has its own board and does not count toward the overall rank.
+  First-turn shapes 1.186-1.310x; turn 1 / turn 4 shapes ~1.003-1.004x (Marlin path, unchanged).
+- decode_layer v19_nb2_256_evict.py (sha d70c6c3e..., sent at 1e4fd5c): submit 7702cb83b35b4737, **1.364x (1.344-1.385)**,
+  13/13 tests. The CI lower bound clears v17's board upper bound (1.337), so this is a significant improvement over v17
+  (1.318x). verify 16 sliding / full 1.343 / 1.237x, verify 32 1.282 / 1.182x.
+- Public board after both (~3:44 PM ET): overall rank 699 of 1606 (solved 4; prefill not counted).
+- Ledger note (review round 13, #15): 17 older rows on main fail the ledger check. 16 of them have commit time equal to
+  send time, i.e. they were back-filled after the fact. The v7_audit_nits row has commit 'dedupe' and a sha256 that does
+  not match the file. They are left as recorded and not rewritten; treat them as unverified history.
+
 ## Oct 29 ~2:36-3:00 PM ET: leaderboard gaps; decode v18 / v18b; MoE v26e (Arman: climb incrementally, keep afloat)
 Leaderboard (public board, ~2:40 PM ET; overall rank 754 / 1589):
 
@@ -76,6 +88,12 @@ Follow-ups (~3:05 PM ET, status-r11):
   (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
 - Scored runs left: bf16 10, attention 8, MoE 7 (after the v26e submit), decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26e 94cff1d839e947df 1.539x, MoE v26c
   7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
+- Checks used: bf16 19 of 20 (v27 x2 this session; 2 pre-check rejections created no job); attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
+- Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
+  (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
+- Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
+  093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
 (Ported from branches moe-v26c / moe-v26d by status-r11, review round 11.)
@@ -160,6 +178,35 @@ Follow-ups (~3:05 PM ET, status-r11):
   decode 32 gained 18 us per layer as projected (CUDA experts at 32 tokens); verify 16/32 (Marlin, unchanged code) moved
   with SGLang's own timing (noise).
 
+## Oct 29 ~4:46-5:00 AM ET: MoE v26c (branch moe-v26c off origin/moe-v26 325eb72; built from v26a)
+- Gap census from v26a's profiles (bs 1/8/16/32): moe_mma 36.0/69.8/93.2/157.5 us; outside it silu_mul 2.7-3.8, post-norm
+  3.4-3.7, zero-fill 0.9-3.6, route_prep 1.4-1.6 us, plus 5 inter-kernel gaps: ~9-13 us per call (6-8% at bs16-32,
+  ~20% at bs1). Activation staging sits inside moe_mma (not separable without a profiler) and needs a loop restructure, so
+  the launch chain went first.
+- v26c: 6 -> 4 launches. FP32 sum buffers torch.empty; route_prep runs one block per route and zeroes local routes' GEMM-1
+  (2I) and GEMM-2 (H) rows (block 0 builds the lists). silu_mul removed: GEMM 1 split-K CTAs count arrivals per (work item,
+  row block) in self-resetting int32 counters (state["c1"], zeroed in prepare, reset by the last CTA), and the last CTA
+  writes silu(gate) * up as BF16 for its 16 * WARPS rows with silu_mul's exact expression. Same FP32 sums and SiLU math:
+  bit-identical to v26a up to the FP32 atomic order both already have. __launch_bounds__ minBlocks keeps v26a's occupancy
+  for GATED (8 warps: 4 CTAs/SM at 64 regs, 8 B spill vs v26a's 28 B; 4 warps: 7 CTAs/SM, 72 regs).
+  tools/build_moe_v26c.py -> muse_moe_w4a16/runs/v26c_fused_chain.py, byte-exact at HEAD 8bd9599.
+- Check f479a34c48984e24 (sha 85fe5e71..., commit 8bd9599): 5/5, 1.497x (95% 1.474-1.519) vs v26a 1.457x (1.435-1.479).
+  | load | SGLang | v26c us / x | v26a x |
+  |---|---|---|---|
+  | decode 1 | 79.3 | 40.0 / 1.982 | 1.914 |
+  | decode 16 | 188.0 | 120.4 / 1.561 | 1.502 |
+  | decode 32 | 206.4 | 165.2 / 1.249 | 1.219 |
+  | verify 1 (8 tok) | 151.1 | 93.3 / 1.619 | 1.542 |
+  | verify 16 (128, Marlin) | 464.2 | 338.6 / 1.371 | 1.361 |
+  | verify 32 (256, Marlin) | 614.5 | 468.7 / 1.311 | 1.302 |
+  Lower bound 1.474 is not > 1.48 (bar: v26a's CI upper 1.479): no PR #11. Not submitted. Second MoE check kept.
+- Left outside moe_mma: post-norm sum 3.0-4.1 us, route_prep 2.0-2.8 us. Folding the norm into GEMM 2 needs every local
+  route of a token complete (rows finish in different items): a per-token finisher serializes up to 8 tokens' norms in the
+  last CTA (tail could exceed the 3-4 us kernel); the per-route variant (route-level norm + FP32 atomics into out, per-token
+  counter converts to BF16) nets ~1-2 us and changes the sum order. PDL can't prefetch weights before griddepcontrol.wait
+  (the weight address depends on route_prep's work list), so it would only hide ~1 us of launch latency per boundary. Neither
+  is clearly enough for a check; next real lever is activation staging inside moe_mma (16 KB per CTA from L2 before the loop).
+- (decode v16's STATUS section lives on branch decode-v16 / PR #10.)
 ## Oct 29 ~4:41-4:50 AM ET: decode v16 (branch decode-v16 off origin/moe-v26 325eb72)
 - decode-v14's files brought in by file checkout (git checkout origin/decode-v14 -- muse_decode_layer/runs/v14_verify_split.py
   tools/build_decode_v14.py), committed as-is; no merge of the decode-v14 branch.
@@ -293,6 +340,16 @@ under the no-swizzle K-major layout model (tools/tests/bf16_v27_layout_emu.py: e
 - Next (if bf16 is revisited): keep the kernel (it is correct) and pipeline it: wait_group(1) with the refill one chunk behind,
   a producer warp for TMA + 2 consumer warpgroups, x via TMA too (or stage per chunk), 8-12 W stages of 8 KB, fewer splits
   with a smaller x footprint. bf16 checks: 19 of 20 used today (v27 x2); 1 left until 8 PM ET.
+## Oct 29 ~3:25-3:40 AM ET: attention_decode v15 (branch attn-v15, off moe-v25) -> PR #6
+| job | file | speedup (95% CI) | notes |
+|---|---|---|---|
+| 28ad328cf5284948 | v15a_verify_split.py | 1.232x (1.214-1.251) | exploration: every verify block on the split-KV head kernel. Sliding verify 1.553 / 1.533 / 1.283 (b1/16/32; FA3 was 1.334 / 1.259 / 1.160), full verify b1 1.633 (FA3 1.201), full verify b16/b32 0.691 / 0.666 (FA3 1.033 / 1.014) |
+| ab5f387ae32242ba | v15b_verify_route.py | **1.376x (1.355-1.396)** | routes picked from v15a's table by regime: head kernel for sliding verify (any batch) and full verify b1; FA3 for full verify b>=2. Decode unchanged (1.63-1.86). CI clear of v14b's board 1.317 (1.297-1.336) |
+- Both carry r6 m2 (dead _qk_norm/_norm_rope_store/_norm_rope_store_torch/_NORMS removed), n3 (_nsplit docstring, combine's
+  dead NSPLIT_P2 masking removed + power-of-two assert), n4 (RoPE table index clamped to NPOS - 1). No precision change
+  (q E4M3 as before, same kernels as the decode path). Not submitted.
+- Next: full verify b>=2 (FA3, ~1.02x) is the only weak cell; our 64-row head kernel is 0.67x there (compute-bound in Triton at
+  8 x 8 query rows per KV head). Fusing combine into split / norm+RoPE into the q load were not tried this session.
 
 ## Oct 29 ~3:10-3:27 AM ET: MoE session (branch moe-v25, off bf16-tma-wgmma). Nothing clears the 1.40 bar; no PR.
 | job | file | speedup (95% CI) | notes |
@@ -367,7 +424,9 @@ Board 1.117x (v9_regime). Attention checks this session: see the table (window t
 |---|---|---|---|
 | ed743d60bec04ad8 | v13_fused_store.py | **1.243x (1.224-1.261)** 16/16 | one Triton program per (token, head) does RMSNorm + interleaved RoPE + q out + k/v E4M3 cast + cache-row store. It replaces FusedQKNorm + 2 casts + store_cache (4-5 launches). Decode b1 sliding 16.1 -> 12.8 us (1.58x); verify shapes 1.01-1.25x now (FA3 path gains too) |
 | ad626ebbafd94cbb | v14_fp8q.py | **1.325x (1.305-1.345)** 16/16: decode 1.63-1.88x sliding, 1.36-1.66x full; verify 1.02-1.36x | v13 + q written in E4M3 by the fused kernel (FA3 skips its cast) + FP8xFP8 QK dot in the split kernels, PV in BF16 |
-Caveat: the Triton CPU interpreter's float8e4nv conversion is wrong (2.0 -> 1.0), so cache bytes can't be checked locally. GPU tests passed 16/16.
+Caveat (r6 n2): the Triton 3.9 CPU interpreter's fp32->E4M3 is wrong when rounding carries into the exponent (1.9375 -> 1.0,
+0.496 -> 0.25), rounds ties away and gives NaN above ~464; its fp32->bf16 truncates (2.0 itself converts fine). Check cache
+bytes locally with a cast-free kernel copy (review tests/t_fused_precast.py pattern), not through the interpreter's casts. GPU tests passed 16/16.
 FOR decode_layer: DONE in decode v13 (check 8ddcc64985b5474e, 1.278x): the fused kernel + FP8 q replaced qk_norm + casts + store_cache.
 Next (attention): the r2 nits (_nsplit docstring 225 keys, dead NSPLIT_P2 masking) are still open in the attention file (sent files are not edited), so fix them in v15. Fold the split combine into the split kernel (last-arriving program via an atomic counter) to save ~1-2 us per decode shape;
 fold the fused norm/RoPE into the split kernel's q load for decode (q_len 1).
