@@ -39,7 +39,49 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
   unpooler m16/32; nothing beats SGLang's cuBLAS on qkv_gate; v7's Triton stays best on o.
 - bf16 v12_bench_probe (check b8e3f1ba63b044c5): same bench at m=128/256 + probe of in-process JIT toolchains
   (cupy / cuda-python NVRTC / CuTe DSL / tilelang) in the judge image, to see whether a hand-written CUDA
-  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed).
+  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed) [CORRECTION, review r4 nit 7: the rules page says native CUDA should be compiled in-file with PyTorch load_inline, so it IS allowed; we use CuPy/NVRTC either way].
+
+## Oct 29 ~1:30-1:45 AM ET: decode_layer with the v24 CUDA experts (branch decode-moe-cuda, off moe-cuda-mma)
+MoE v24 was SUBMITTED by the parent after Senior Larper's r4 approval: job d625bb2af63b43c1, 1.380x.
+Board decode_layer 1.202x (v6). decode checks this session: 4 (v9-v12); 5/20 in the window.
+| check | file | speedup | note |
+|---|---|---|---|
+| 62ed09f29fd74783 | v9_moe_cuda.py | 1.219x (1.200-1.237) | v24 experts at <=32 tokens + bf16 v17 pooler/unpooler routes. Gains at 1-16 tokens; at 32 agentic tokens moe_mma 127.5 us vs Marlin 124.3, and the cuBLAS-T unpooler lost at 128/256 |
+| d761340c8ec04009 | v10_route.py | **1.243x (1.225-1.262)** | CUDA experts at <=16 tokens only, v8 projections, Triton pre-expert RMSNorm (torch's took 6 us) |
+| 4e2d567c86e84404 | v11_rmsnorm_all.py | 1.234x | Triton RMSNorm at every token count: within noise, not carried |
+| ff2c439e12e54f31 | v12_precompile.py | see PR #3 | v10 + r4 m1 (get_function on every kernel in prepare). Candidate |
+Per shape for v10:
+- 1 token: 1.39x; 16 tokens: 1.25-1.31x; verify 8 tokens: 1.35-1.37x.
+- 32 tokens: 1.07/1.17x; 128 tokens: 1.15-1.20x; 256 tokens: 1.11-1.18x.
+Next (decode_layer):
+1. 32 tokens sliding is 1.065x, the weakest shape. The MoE kernel ties Marlin there; it needs NB=2 work items or the issue-bound fixes from the MoE notes.
+2. Verify 128/256 tokens use Marlin + FA3. Try v24-style tensor-core experts with NB=4 for 128 tokens.
+3. Fuse the CUDA-expert prologue: zero buffer + route_prep + silu_mul + post-norm is about 4 launches.
+
+## Oct 29 ~1:15-1:30 AM ET: bf16 CUDA GEMV session (branch moe-packed-dequant). Nothing beats the board clearly.
+Board entry 1.115x (v7). bf16 checks used in this session: 6 (11/20 in the window since 8 PM ET).
+| check | file | speedup | note |
+|---|---|---|---|
+| cdcf4c435dce475a | v13_cuda_gemv.py | failed 7/9 | NVRTC mma.sync GEMV (W repacked into A-fragment order, 16 B x loads); CUDA_CFG keyed by exact m -> KeyError m=7. In-prepare bench data in log |
+| ee8f8ee6204d4b78 | v14_route.py | 1.109x | routing picked from the in-prepare bench; the bench overstated CUDA wins (it flushes with a memset, so the judge's cold L2 behaves differently). In the judge, CUDA lost at pooler m1/8/16 and qkv m8 |
+| e2894d15903941b8 | v15_cpasync.py | 0.681x | per-warp cp.async ring: 2x slower kernels (cause not found) |
+| 693c8d31f9134635 | v16_l2pf.py | 1.009x | v14 + per-warp cp.async.bulk.prefetch.L2: worse everywhere |
+| febf8e4adb9c4e1a | v17_best_route.py | **1.133x (1.116-1.150)** | best per-shape routing from judge numbers; about the same as v11's 1.132x, so not clearly above 1.115x |
+| 14ba8a134b084788 | v18_dbuf.py | 1.062x | register double buffer (118 regs, loads really in flight) on qkv m<=8 and pooler m<=16. Still worse: qkv m1 15.0 vs 13.7 us, pooler m16 33 us. The CUDA-core-issue GEMV is a dead end at these shapes. |
+v17 routing:
+- The CUDA GEMV is used only for the sliced unpooler (m<=8), at about 1.02-1.03x.
+- Pre-transposed cuBLAS (`torch.mm(x, W.t().contiguous())`) is used for qkv m16/32, pooler m32, unpooler m>=16 and o m128.
+- Everything else stays on v7 (Triton for o and pooler at m<=32, SGLang for qkv at m<=8).
+Lessons:
+- The hand-written CUDA GEMV reaches about 3.2 TB/s (pooler m1 20.7 us kernel); Triton v7 reaches 3.45 and cuBLAS is similar.
+- ptxas sinks the batched register loads next to their mmas (38 regs at U=8), so not enough loads are in flight.
+- Don't trust the in-prepare bench for small memory-bound kernels; route from judge per-shape tables.
+Next steps (bf16):
+1. qkv_gate is about 1.00x at every m. The kernel takes 13.5 us against an SOL of 7.9 us, so it has the most headroom. Try a TMA (cp.async.bulk.tensor) or
+   wgmma-based swap-AB kernel with a persistent grid of 132 CTAs, plus a deep mbarrier pipeline (4-6 stages of 16-32 KB per SM).
+   That is the standard way to reach >4 TB/s; plain loads and cp.async 16 B both topped out at about 3.2 TB/s.
+2. (Done in v18; it did not help.) The explicit register double buffer was slower, so the next real attempt is TMA/wgmma (step 1).
+3. Use the pooler/o Triton configs at m128/256 (they currently fall back to cuBLAS-T at 1.00-1.02x).
 
 ## Oct 29 ~1:30 AM ET: MoE breakthrough (branch moe-packed-dequant) - NOT submitted
 Key finding: the judge image has CuPy, cuda-python NVRTC, CuTe DSL, tilelang, quack (probe in bf16 v12,

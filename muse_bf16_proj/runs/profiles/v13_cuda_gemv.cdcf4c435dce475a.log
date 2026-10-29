@@ -1,0 +1,39 @@
+BENCH qkv_gate m=1 n=2304 sglang=21.15us cfg=22.85us | cu16,2,8=19.65(8e-05) cu8,4,8=19.65(6e-07) cu4,8,8=19.84(8e-05) cu4,4,8=20.06(6e-07) cu8,2,8=20.13(6e-07) cu16,2,2=20.64(6e-07) cu8,2,2=20.86(6e-07) cu2,8,8=20.90(6e-07)
+BENCH qkv_gate m=8 n=2304 sglang=21.82us cfg=23.23us | cu4,8,8=20.51(1e-04) cu16,2,8=20.67(9e-05) cu8,4,8=20.90(1e-04) cu2,8,8=21.09(8e-05) cu4,4,8=21.12(8e-05) cu8,2,8=21.25(8e-05) cu16,2,2=21.54(9e-05) cu8,2,2=21.89(8e-05)
+BENCH qkv_gate m=16 n=2304 sglang=21.70us cfg=25.50us | mm_Wt=21.89(0e+00) cu8,2,8=23.30(1e-04) cu8,4,8=23.33(1e-04) cu4,4,8=23.46(1e-04) cu4,8,8=23.62(1e-04) cu2,8,8=23.90(1e-04) cu16,2,8=23.94(1e-04) cu2,8,2=23.94(1e-04)
+BENCH qkv_gate m=32 n=2304 sglang=22.02us cfg=36.74us | mm_Wt=22.18(0e+00) cu8,2,2=35.78(1e-04) cu4,4,4=36.96(1e-04) cu8,2,4=37.70(1e-04) cu4,4,2=37.98(1e-04) cu8,4,2=40.83(1e-04) cu4,4,8=41.12(1e-04) cu8,2,8=41.86(1e-04)
+BENCH o m=1 n=8192 sglang=12.67us cfg=14.78us | mm_Wt=12.64(0e+00) cu1,8,4=13.02(9e-05) cu1,4,8=13.09(2e-05) cu1,8,2=13.79(9e-05) cu2,4,2=13.82(9e-05) cu1,4,2=13.89(9e-05) cu2,2,8=14.37(2e-05) cu4,2,4=14.37(9e-05)
+BENCH o m=8 n=8192 sglang=12.64us cfg=14.69us | mm_Wt=12.42(0e+00) cu1,8,4=13.18(4e-05) cu1,4,8=13.25(4e-05) cu1,8,2=13.76(5e-05) cu1,4,2=14.14(3e-05) cu2,4,2=14.30(5e-05) cu2,4,4=14.53(4e-05) cu1,4,4=14.85(4e-05)
+BENCH o m=16 n=8192 sglang=12.48us cfg=16.16us | mm_Wt=12.48(0e+00) cu1,4,8=15.04(8e-05) cu1,8,2=15.04(8e-05) cu1,4,2=16.13(8e-05) cu1,4,4=16.13(8e-05) cu1,8,4=16.58(8e-05) cu2,2,8=17.47(8e-05) cu1,2,8=17.86(8e-05)
+BENCH o m=32 n=8192 sglang=12.77us cfg=24.99us | mm_Wt=12.51(0e+00) cu1,4,4=24.90(6e-05) cu1,4,2=25.47(6e-05) cu1,4,8=26.85(6e-05) cu1,2,2=27.17(6e-05) cu2,2,2=27.74(6e-05) cu1,2,4=29.12(6e-05) cu2,2,4=29.25(6e-05)
+BENCH pooler m=1 n=4096 sglang=30.91us cfg=33.57us | cu4,4,8=27.17(3e-04) cu1,8,8=27.23(3e-04) cu8,2,8=27.30(3e-04) cu2,8,8=27.49(3e-04) cu4,2,8=28.26(3e-04) cu2,4,8=28.29(3e-04) cu16,2,8=28.77(3e-04) cu8,4,8=28.99(3e-04)
+BENCH pooler m=8 n=4096 sglang=30.88us cfg=34.14us | cu4,4,8=27.68(9e-05) cu2,8,8=27.90(9e-05) cu1,8,8=28.16(9e-05) cu8,2,8=28.38(9e-05) cu2,4,8=29.31(9e-05) cu4,2,8=29.73(9e-05) mm_Wt=29.82(1e-04) cu8,2,2=29.92(9e-05)
+BENCH pooler m=16 n=4096 sglang=31.07us cfg=36.03us | cu4,4,8=30.02(1e-04) mm_Wt=30.05(1e-04) cu2,8,8=30.21(1e-04) cu8,2,8=30.43(9e-05) cu2,8,2=30.75(1e-04) cu1,8,2=31.55(9e-05) cu1,8,8=31.81(9e-05) cu2,4,8=33.22(9e-05)
+BENCH pooler m=32 n=4096 sglang=31.94us cfg=52.03us | mm_Wt=30.30(1e-04) cu4,4,2=48.22(1e-04) cu4,2,2=49.57(1e-04) cu2,4,4=51.94(1e-04) cu4,2,4=53.15(1e-04) cu2,8,2=53.57(1e-04) cu2,4,2=55.23(1e-04) cu4,4,4=60.64(1e-04)
+BENCH unpooler m=1 n=1024 sglang=12.48us cfg=11.65us | cu16,4,2=11.62(0e+00) cu8,4,2=11.68(0e+00) cu16,2,4=11.74(0e+00) cu8,4,4=11.84(0e+00) cu16,2,2=11.87(0e+00) cu4,8,4=11.97(0e+00) cu8,8,2=12.45(0e+00) mm_Wt=12.48(0e+00)
+BENCH unpooler m=8 n=1024 sglang=12.32us cfg=11.84us | cu4,8,4=11.84(9e-05) cu16,4,2=11.87(9e-05) cu8,4,4=11.87(9e-05) cu8,4,2=12.03(9e-05) cu8,8,2=12.19(9e-05) mm_Wt=12.58(0e+00) cu16,2,4=12.67(9e-05) cu4,8,2=12.70(9e-05)
+BENCH unpooler m=16 n=8192 sglang=28.42us cfg=33.60us | mm_Wt=27.58(0e+00) cu1,8,8=28.03(2e-04) cu1,8,2=28.16(2e-04) cu2,4,8=30.05(2e-04) cu4,2,8=30.14(2e-04) cu1,4,8=30.46(2e-04) cu2,2,8=33.15(2e-04) cu1,8,4=33.38(2e-04)
+BENCH unpooler m=32 n=8192 sglang=28.58us cfg=49.50us | mm_Wt=27.68(0e+00) cu2,2,2=48.64(1e-04) cu2,4,2=48.96(1e-04) cu1,4,4=49.47(1e-04) cu1,8,2=51.17(1e-04) cu1,4,2=52.58(1e-04) cu2,2,4=53.63(1e-04) cu1,4,8=58.56(1e-04)
+BENCH done 16s
+Traceback (most recent call last):
+  File "/tmp/muse_bf16_proj-c1nweb08/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_bf16_proj-c1nweb08/run/worker.py", line 415, in <lambda>
+    return functools.partial(lambda k, p, d: k(d, p), fn, state["prep"])
+                                             ^^^^^^^
+  File "/tmp/muse_bf16_proj-c1nweb08/run/submission.py", line 239, in kernel_fn
+    S, WARPS, U = CUDA_CFG[(layer, n == 1024, m)]
+                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: ('pooler', False, 7)
+Traceback (most recent call last):
+  File "/tmp/muse_bf16_proj-c1nweb08/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_bf16_proj-c1nweb08/run/worker.py", line 415, in <lambda>
+    return functools.partial(lambda k, p, d: k(d, p), fn, state["prep"])
+                                             ^^^^^^^
+  File "/tmp/muse_bf16_proj-c1nweb08/run/submission.py", line 239, in kernel_fn
+    S, WARPS, U = CUDA_CFG[(layer, n == 1024, m)]
+                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: ('unpooler', True, 5)
