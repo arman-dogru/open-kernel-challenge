@@ -51,3 +51,6 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 02:47:55	check	cd0ad18a7e114069	muse_bf16_proj	muse_bf16_proj/runs/v26_v17_tma_m1.py	a6b1535d1dd658427307110a3a245822806bbc1c337f4a2b6767428855e9dfd7	5cadffa
 2026-10-29 03:12:11	check	0d61ab04212b4916	muse_moe_w4a16	muse_moe_w4a16/runs/v25_scale_pair.py	ccc23454c8463169a0d03a91e6512e43e67bbf0cfdf9b2b6f1c4cfb1bdfc7291	2541555
 2026-10-29 03:23:20	check	843d33d84aa34786	muse_moe_w4a16	muse_moe_w4a16/runs/v25b_fold_fill.py	c38267b1b940d906ac2f0597706b4889719c727d6dfc2a7c81b28e1575f73f87	5cdb8f9
+2026-10-29 03:27:29	check	28ad328cf5284948	muse_attention_decode	muse_attention_decode/runs/v15a_verify_split.py	499fe7a8007ad4986db3bf9ac0c65f0d54afc705622bbf6c2b2d49164e11f05e	4abfe28
+2026-10-29 03:33:44	check	ab5f387ae32242ba	muse_attention_decode	muse_attention_decode/runs/v15b_verify_route.py	2196e01c425bce7c3f42c79e9366e8836ef25ec930d23078ad6228d6b12d1a71	616fb66
+2026-10-29 03:51:05	submit	8f7ac0501b5849d7	muse_attention_decode	muse_attention_decode/runs/v15b_verify_route.py	2196e01c425bce7c3f42c79e9366e8836ef25ec930d23078ad6228d6b12d1a71	5ced66c
