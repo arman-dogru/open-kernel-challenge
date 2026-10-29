@@ -22,9 +22,47 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
-## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:45 PM ET (supersedes the ~3:27 AM line)
-- Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 3, decode_layer 8 (after decode v18 check 9566de62f7e94ed1),
-  prefill_layer 20 (new 5th problem, not started).
+## Oct 29 ~2:36-3:00 PM ET: leaderboard gaps; decode v18 / v18b; MoE v26e (Arman: climb incrementally, keep afloat)
+Leaderboard (public board, ~2:40 PM ET; overall rank 754 / 1589):
+
+| problem | ours | rank | top-1 | top-50 | ~rank 500 | rank at +0.05x |
+|---|---|---|---|---|---|---|
+| bf16_proj | 1.115 | 1224 / 1378 | 1.637 | 1.560 | 1.286 | 1025 |
+| moe_w4a16 | 1.500 | 694 / 1105 | 2.689 | 2.386 | 1.793 | 677 |
+| attention_decode | 1.385 | 793 / 1058 | 3.054 | 2.639 | 1.733 | 746 |
+| decode_layer | 1.318 | 694 / 972 | 2.418 | 2.184 | 1.541 | 645 |
+
+The overall formula is unpublished. The best fit is the sum of per-problem step times (SGLang 4831 / 13448 / 3766 / 22620 us
+for bf16 / MoE / attention / decode). Overall places per +0.05x on that model: decode ~23, MoE ~9, bf16 ~5,
+attention ~3. So decode_layer (half the summed time) and MoE pay most per unit of effort.
+
+decode v18 (branch decode-v18 off origin/decode-v17 032fef4, tools/build_decode_v18.py, 9bd11b9): CUDA experts for
+128 / 256-token verify (NB 2 / NB 4), plus the review round 10 minors (FASTSCALE per state, eager compile, no BENCH).
+Check 9566de62f7e94ed1 scored 1.333x (1.313-1.353): verify16 422 / 619 -> 405 / 587 us (win), but verify32 lost to
+Marlin with NB 4 (115 registers). v18b (8e01dcf) caps the CUDA path at 192 tokens. Check ae89a962123748e6 scored
+1.328x (1.308-1.348), in the noise of v17 (board 1.318, check 1.333): verify16 402 / 594 us. No PR.
+
+MoE v26e (branch moe-v26e off origin/moe-v26c a89056a, tools/build_moe_v26e.py -> runs/v26e_nb2_evict.py, 252697a):
+v26c + the same NB 2 CUDA experts at 128 tokens (SMALL_MAX 192), + L2 evict-first / L1 no-allocate weight and scale
+loads (createpolicy + ld.global.nc...L2::cache_hint; kernel-wide policy register, NVRTC registers and spills equal
+to v26c), + review round 10 minors. Check b8a324016b7b4422 scored **1.546x (1.523-1.569)**. Board v26c: 1.500x
+(1.478-1.523).
+
+| case | v26c check f479a34c | v26c submit 7eaa9622 | v26e b8a32401 |
+|---|---|---|---|
+| decode 1 | 40.0 | 38.5 | 39.2 |
+| decode 16 | 120.4 | 120.0 | 117.7 |
+| decode 32 | 165.2 | 158.6 | 161.8 |
+| verify 1 (8 tok) | 93.3 | 87.9 | 86.4 |
+| verify 16 (128 tok) | 338.6 | 349.9 | **298.1** |
+| verify 32 (256 tok) | 468.7 | 468.3 | 470.8 |
+
+(median us). The whole gain is at verify16 (NB 2, -12 to -15%). Evict-first is neutral on the bandwidth-bound
+small shapes. Not submitted, no PR opened (for Arman / Larper).
+
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:53 PM ET (supersedes the ~2:45 PM line)
+- Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 2 (after v26e b8a324016b7b4422), decode_layer 7
+  (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
 - Scored runs left: bf16 10, attention 8, MoE 8, decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26c
   7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
