@@ -29,6 +29,40 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:41-4:50 AM ET: decode v16 (branch decode-v16 off origin/moe-v26 325eb72)
+- decode-v14's files brought in by file checkout (git checkout origin/decode-v14 -- muse_decode_layer/runs/v14_verify_split.py
+  tools/build_decode_v14.py), committed as-is; no merge of the decode-v14 branch.
+- v16 = v14 + MoE v26a's exact PRMT + IMAD E4M3 scale splat in the layer's CUDA expert kernels (same 0x08..0x7E range check
+  in _moe_small_bank, v14 cvt fallback). tools/build_decode_v16.py -> muse_decode_layer/runs/v16_int_splat.py, byte-exact at
+  HEAD 7bdc9bc; NVRTC: GATED moe_mma PTX 4194 -> 3171, down 2243 -> 1732.
+- Check b94ed32acfce4452 (sha a1057a43..., commit 7bdc9bc): 13/13, 1.289x (95% 1.270-1.309) vs v14 1.278x (1.259-1.297),
+  board v13 1.251x. Lower bound 1.270 is not > 1.28: no PR #10. Not submitted.
+  | case | v14 us / x | v16 us / x |
+  |---|---|---|
+  | decode 1 sliding | 119.4 / 1.438 | 117.0 / 1.462 |
+  | decode 1 full | 126.1 / 1.451 | 125.0 / 1.471 |
+  | decode 16 sliding | 192.9 / 1.340 | 190.7 / 1.396 |
+  | decode 16 full | 325.4 / 1.327 | 317.6 / 1.362 |
+  | decode 32 sliding | 232.6 / 1.098 | 236.5 / 1.096 |
+  | decode 32 full | 480.0 / 1.278 | 486.4 / 1.262 |
+  | verify 1 sliding | 187.7 / 1.415 | 176.0 / 1.483 |
+  | verify 1 full | 199.0 / 1.409 | 187.8 / 1.476 |
+  | verify 16 sliding | 443.6 / 1.210 | 434.9 / 1.155 |
+  | verify 16 full | 624.1 / 1.145 | 619.5 / 1.110 |
+  | verify 32 sliding | 618.8 / 1.167 | 610.6 / 1.180 |
+  | verify 32 full | 973.5 / 1.111 | 960.1 / 1.097 |
+  Gains where the CUDA experts run (<= 16 tokens: decode 1/16, verify 1 = 8 tokens, -2 to -12 us); 32+ tokens run Marlin
+  (unchanged; differences are noise).
+- Second decode check NOT spent: the only fresh lever is CUDA experts at 17-32 tokens; v15b measured that path ~6 us slower than
+  Marlin at decode 32 (238.5 vs 232.6 us, old splat, W16), and the splat saved ~10 us at bs32 standalone, so projected ~228 vs
+  ~233-237 us: ~2% on 2 of 12 shapes, ~0.3% overall, not enough to clear 1.28. Worth folding into a future decode bundle.
+- MoE v26b (4-bit unpack), offline analysis only, no check: each 32-bit code word -> 4 bf16x2 A registers costs 9 ALU ops
+  (3 x SHF.W + LOP3, 1 x 3 ops) + 4 HMUL2. The e2m1 bits must sit at bf16 bits {15, 8, 7, 6} (sign, 2 exponent LSBs, mantissa
+  MSB: bf16/e2m1 = 2^-126 on both the subnormal and normal codes, the HMUL2 by scale * 2^119 fixes the bias), so a 1-op
+  in-place output plus three 2-op outputs needs four rotations of {6,7,8,15} tiling Z16; a hand search found none. Best case is
+  ~1 op per word (~3% of the k-step): not clearly promising, MoE check kept. Bigger bs32 levers left: the 5 launches' gaps
+  (GEMM 1 -> silu -> GEMM 2 tails) and per-CTA activation staging (16 KB per CTA, ~22% of its weight bytes, from L2).
+
 ## Oct 29 ~4:35-5:00 AM ET: MoE v26a (branch moe-v26 off origin/bf16-wgmma 0b2cd87; moe-v25 is its ancestor)
 - bf16 wgmma is PARKED (Arman) until a cluster/DSMEM-reduction or producer-warp design; v28/v29 notes below.
 - Where small-batch MoE time goes (judge routing, generate_input dist "normal", busiest GPU, 200 CPU seeds): bs32 touches
