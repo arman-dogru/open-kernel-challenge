@@ -1,0 +1,221 @@
+-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[16]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[16]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[64]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[16]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[64]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[64]]')
+Traceback (most recent call last):
+  File "/tmp/muse_attention_decode-mndl356f/run/worker.py", line 484, in child_main
+    out = kernel()(state.get("data"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/muse_attention_decode-mndl356f/run/submission.py", line 495, in kernel_fn
+    _attn_split[(hkv, nsplit, batch)](
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 374, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 757, in run
+    kernel = self._do_compile(key, signature, device, constexprs, options, attrs, warmup)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/runtime/jit.py", line 902, in _do_compile
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 307, in compile
+    module = src.make_ir(target, options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/triton/compiler/compiler.py", line 80, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 74:8:
+            acc = acc * alpha[:, None] + tl.dot(p.to(q.dtype), v)
+        m_i = m_new
+    # partial: o = acc / l (times the value scale), lse in log2 units
+    out = acc * (vs / tl.where(l_i > 0, l_i, 1.0))[:, None]
+    lse = tl.where(l_i > 0, m_i + tl.log2(tl.where(l_i > 0, l_i, 1.0)), float("-inf"))
+    idx = (tq * HQ + head) * NSPLIT + s
+    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, None])
+    tl.store(lse_ptr + idx, lse, mask=mvalid)
+    if MERGE:  # last arrival of (request b, KV head h) merges its NSPLIT partials (v18), as _combine_norm_gate
+        tl.debug_barrier()  # every thread's partial stores issued before the one acq_rel GPU-scope arrival
+        old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
+        if old == NSPLIT - 1:
+        ^
+AssertionError('initial value for `base` is of type int32[], but the then block redefines it as int32[constexpr[64]]')

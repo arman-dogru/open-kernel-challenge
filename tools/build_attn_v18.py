@@ -31,17 +31,17 @@ rep('''    tl.store(o_ptr + idx[:, None] * D + d[None, :], out, mask=mvalid[:, N
         old = tl.atomic_add(cnt_ptr + b * HKV + h, 1, sem="acq_rel", scope="gpu")
         if old == NSPLIT - 1:
             sp = tl.arange(0, NSPLIT)
-            base = (tq * HQ + head) * NSPLIT
-            lse_t = tl.load(lse_ptr + base[:, None] + sp[None, :], mask=mvalid[:, None], other=float("-inf"),
+            mbase = (tq * HQ + head) * NSPLIT
+            lse_t = tl.load(lse_ptr + mbase[:, None] + sp[None, :], mask=mvalid[:, None], other=float("-inf"),
                             cache_modifier=".cg")
             mx = tl.max(lse_t, 1)
             mxs = tl.where(mx == float("-inf"), 0.0, mx)
             wsum = tl.sum(tl.where(lse_t == float("-inf"), 0.0, tl.exp2(lse_t - mxs[:, None])), 1)
             acc2 = tl.zeros((BLOCK_M, D), tl.float32)
-            for k in range(NSPLIT):
-                lk = tl.load(lse_ptr + base + k, mask=mvalid, other=float("-inf"), cache_modifier=".cg")
+            for kk in range(NSPLIT):
+                lk = tl.load(lse_ptr + mbase + kk, mask=mvalid, other=float("-inf"), cache_modifier=".cg")
                 wk = tl.where(lk == float("-inf"), 0.0, tl.exp2(lk - mxs))
-                ok_ = tl.load(o_ptr + (base + k)[:, None] * D + d[None, :], mask=mvalid[:, None], other=0.0,
+                ok_ = tl.load(o_ptr + (mbase + kk)[:, None] * D + d[None, :], mask=mvalid[:, None], other=0.0,
                               cache_modifier=".cg")
                 acc2 += ok_ * wk[:, None]
             a = acc2 / tl.where(wsum > 0, wsum, 1.0)[:, None]
