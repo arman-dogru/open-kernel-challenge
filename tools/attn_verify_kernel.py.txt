@@ -1,0 +1,131 @@
+@triton.jit
+def _attn_verify(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_ptr, ks_ptr, vs_ptr,
+                 o_ptr, lse_ptr, cnt_ptr, gate_ptr, stride_gt, out_ptr, qk_scale, chunk, PAGE, eps,
+                 L: tl.constexpr, G: tl.constexpr, NSPLIT: tl.constexpr, BLOCK_N: tl.constexpr, D: tl.constexpr,
+                 HW: tl.constexpr, PV16: tl.constexpr):
+    """Full-attention verify block, both KV heads (HKV = 2) in one program per (split, request): the G * L = 64 query
+    rows of each KV head (8 tokens x 8 heads) are one MMA tile, each key's whole cache row (2 x 64 bytes) is read
+    once, the page index once per key for both heads, V issued with K. Partials (o, lse) go to o_ptr / lse_ptr as
+    in _attn_split; the request's last split to finish (self-resetting arrival counter cnt_ptr[b]) merges them and
+    applies the per-head RMSNorm x sigmoid(gate), as _combine_norm_gate does, so there is no second launch."""
+    s = tl.program_id(0)
+    b = tl.program_id(1)
+    HQ: tl.constexpr = 2 * G
+    W: tl.constexpr = 2 * D
+    BM: tl.constexpr = G * L
+    m = tl.arange(0, BM)
+    j = m // G
+    hm = m % G
+    d = tl.arange(0, D)
+    tq = b * L + j
+    q0 = tl.load(q_ptr + tq[:, None] * stride_qt + hm[:, None] * D + d[None, :])
+    q1 = tl.load(q_ptr + tq[:, None] * stride_qt + (G + hm)[:, None] * D + d[None, :])
+    total = tl.load(seqlens_ptr + b)
+    pos = total - L + j
+    lo = s * chunk
+    hi = tl.minimum(lo + chunk, total)
+    if HW:
+        ks = tl.load(ks_ptr)
+        vs = tl.load(vs_ptr)
+    else:
+        ks = tl.load(ks_ptr) * 256.0
+        vs = tl.load(vs_ptr) * 256.0
+    scale = qk_scale * ks * LOG2E
+    m0 = tl.full((BM,), float("-inf"), tl.float32)
+    m1 = tl.full((BM,), float("-inf"), tl.float32)
+    l0 = tl.zeros((BM,), tl.float32)
+    l1 = tl.zeros((BM,), tl.float32)
+    a0 = tl.zeros((BM, D), tl.float32)
+    a1 = tl.zeros((BM, D), tl.float32)
+    for n in range(lo, hi, BLOCK_N):
+        t = n + tl.arange(0, BLOCK_N)
+        tmask = t < hi
+        page = tl.load(pt_ptr + b * stride_pt + t // PAGE, mask=tmask, other=0)
+        row = (page.to(tl.int64) * PAGE + t % PAGE) * W
+        kb0 = tl.load(k_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
+        kb1 = tl.load(k_ptr + row[:, None] + D + d[None, :], mask=tmask[:, None], other=0)
+        vb0 = tl.load(v_ptr + row[:, None] + d[None, :], mask=tmask[:, None], other=0)
+        vb1 = tl.load(v_ptr + row[:, None] + D + d[None, :], mask=tmask[:, None], other=0)
+        ok = tmask[None, :] & (t[None, :] <= pos[:, None])
+        sc0 = tl.where(ok, tl.dot(q0, tl.trans(_kv(kb0, HW, q0.dtype))) * scale, float("-inf"))
+        sc1 = tl.where(ok, tl.dot(q1, tl.trans(_kv(kb1, HW, q1.dtype))) * scale, float("-inf"))
+        n0 = tl.maximum(m0, tl.max(sc0, 1))
+        n1 = tl.maximum(m1, tl.max(sc1, 1))
+        z0 = tl.where(n0 == float("-inf"), 0.0, n0)
+        z1 = tl.where(n1 == float("-inf"), 0.0, n1)
+        p0 = tl.exp2(sc0 - z0[:, None])
+        p1 = tl.exp2(sc1 - z1[:, None])
+        al0 = tl.exp2(m0 - z0)
+        al1 = tl.exp2(m1 - z1)
+        l0 = l0 * al0 + tl.sum(p0, 1)
+        l1 = l1 * al1 + tl.sum(p1, 1)
+        if PV16:  # FP8 queries: P.V in BF16, as _attn_split
+            a0 = a0 * al0[:, None] + tl.dot(p0.to(tl.bfloat16), _kv(vb0, HW, tl.bfloat16))
+            a1 = a1 * al1[:, None] + tl.dot(p1.to(tl.bfloat16), _kv(vb1, HW, tl.bfloat16))
+        else:
+            a0 = a0 * al0[:, None] + tl.dot(p0.to(q0.dtype), _kv(vb0, HW, q0.dtype))
+            a1 = a1 * al1[:, None] + tl.dot(p1.to(q1.dtype), _kv(vb1, HW, q1.dtype))
+        m0 = n0
+        m1 = n1
+    i0 = (tq * HQ + hm) * NSPLIT + s
+    i1 = (tq * HQ + G + hm) * NSPLIT + s
+    tl.store(o_ptr + i0[:, None] * D + d[None, :], a0 * (vs / tl.where(l0 > 0, l0, 1.0))[:, None])
+    tl.store(o_ptr + i1[:, None] * D + d[None, :], a1 * (vs / tl.where(l1 > 0, l1, 1.0))[:, None])
+    tl.store(lse_ptr + i0, tl.where(l0 > 0, m0 + tl.log2(tl.where(l0 > 0, l0, 1.0)), float("-inf")))
+    tl.store(lse_ptr + i1, tl.where(l1 > 0, m1 + tl.log2(tl.where(l1 > 0, l1, 1.0)), float("-inf")))
+    # last arrival merges: barrier (all threads' partial stores issued), then one acq_rel GPU-scope arrival
+    tl.debug_barrier()
+    old = tl.atomic_add(cnt_ptr + b, 1, sem="acq_rel", scope="gpu")
+    if old == NSPLIT - 1:
+        r = tl.arange(0, L * HQ)  # (token, head) rows of request b
+        tr = b * L + r // HQ
+        hr = r % HQ
+        sp = tl.arange(0, NSPLIT)
+        base = (tr * HQ + hr) * NSPLIT
+        lse_t = tl.load(lse_ptr + base[:, None] + sp[None, :], cache_modifier=".cg")
+        mx = tl.max(lse_t, 1)
+        mxs = tl.where(mx == float("-inf"), 0.0, mx)
+        wsum = tl.sum(tl.where(lse_t == float("-inf"), 0.0, tl.exp2(lse_t - mxs[:, None])), 1)
+        acc = tl.zeros((L * HQ, D), tl.float32)
+        for k in range(NSPLIT):
+            lk = tl.load(lse_ptr + base + k, cache_modifier=".cg")
+            wk = tl.where(lk == float("-inf"), 0.0, tl.exp2(lk - mxs))
+            ok_ = tl.load(o_ptr + (base + k)[:, None] * D + d[None, :], cache_modifier=".cg")
+            acc += ok_ * wk[:, None]
+        a = acc / wsum[:, None]
+        rr = a * tl.rsqrt(tl.sum(a * a, 1) / D + eps)[:, None]
+        g = tl.load(gate_ptr + tr[:, None] * stride_gt + hr[:, None] * D + d[None, :]).to(tl.float32)
+        tl.store(out_ptr + tr[:, None] * (HQ * D) + hr[:, None] * D + d[None, :],
+                 (rr * tl.sigmoid(g)).to(out_ptr.dtype.element_ty))
+        tl.store(cnt_ptr + b, 0)  # self-reset for the next call / graph replay
+
+
+_VERIFY_CNT = {}
+
+
+def _verify_full(data, q, qkv, cfg, block_n, warps, stages, occ):
+    """Full-attention verify (q_len 8) with _attn_verify: one launch, merge + norm + gate fused."""
+    batch, L = cfg["batch"], cfg["q_len"]
+    hq, hkv, d = cfg["num_q_heads"], cfg["num_kv_heads"], cfg["head_dim"]
+    T = batch * L
+    page = cfg["page_size"]
+    capacity = data["page_table"].shape[1] * page
+    nsplit = _nsplit(cfg, batch, 1, capacity, occ)
+    chunk = triton.cdiv(capacity, nsplit)
+    o_part = torch.empty((T * hq * nsplit, d), device=qkv.device, dtype=torch.float32)
+    lse = torch.empty((T * hq * nsplit,), device=qkv.device, dtype=torch.float32)
+    cnt = _VERIFY_CNT.get(qkv.device)
+    if cnt is None or cnt.numel() < batch:
+        # arrival counters, zero between calls (the last arrival resets its own); not derived from the inputs
+        cnt = _VERIFY_CNT[qkv.device] = torch.zeros((max(batch, 256),), device=qkv.device, dtype=torch.int32)
+    hw = qkv.device.type == "cuda"
+    gate = qkv[:, (hq + 2 * hkv) * d:]
+    out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
+    _attn_verify[(nsplit, batch)](
+        q, q.stride(0), data["k_cache"].view(torch.uint8), data["v_cache"].view(torch.uint8), data["page_table"],
+        data["page_table"].stride(0), data["cache_seqlens"], data["k_scale"], data["v_scale"], o_part, lse, cnt,
+        gate, qkv.stride(0), out, cfg["sm_scale"] * cfg["qk_scale_factor"], chunk, page, RMS_EPS,
+        L=L, G=hq // hkv, NSPLIT=nsplit, BLOCK_N=block_n, D=d, HW=hw, PV16=hw, num_warps=warps, num_stages=stages)
+    return out.view(batch, L, hq * d)
+
+
