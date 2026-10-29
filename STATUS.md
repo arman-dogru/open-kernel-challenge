@@ -41,6 +41,19 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
   (cupy / cuda-python NVRTC / CuTe DSL / tilelang) in the judge image, to see whether a hand-written CUDA
   kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed) [CORRECTION, review r4 nit 7: the rules page says native CUDA should be compiled in-file with PyTorch load_inline, so it IS allowed; we use CuPy/NVRTC either way].
 
+## Oct 29 ~1:40-2:00 AM ET: attention_decode fused norm/RoPE/cache store (branch attn-fused, off decode-moe-cuda)
+Board 1.117x (v9_regime). Attention checks this session: see the table (window total 1 + these).
+| check | file | speedup | note |
+|---|---|---|---|
+| ed743d60bec04ad8 | v13_fused_store.py | **1.243x (1.224-1.261)** 16/16 | one Triton program per (token, head) does RMSNorm + interleaved RoPE + q out + k/v E4M3 cast + cache-row store. It replaces FusedQKNorm + 2 casts + store_cache (4-5 launches). Decode b1 sliding 16.1 -> 12.8 us (1.58x); verify shapes 1.01-1.25x now (FA3 path gains too) |
+| ad626ebbafd94cbb | v14_fp8q.py | **1.325x (1.305-1.345)** 16/16: decode 1.63-1.88x sliding, 1.36-1.66x full; verify 1.02-1.36x | v13 + q written in E4M3 by the fused kernel (FA3 skips its cast) + FP8xFP8 QK dot in the split kernels, PV in BF16 |
+Caveat: the Triton CPU interpreter's float8e4nv conversion is wrong (2.0 -> 1.0), so cache bytes can't be checked locally. GPU tests passed 16/16.
+FOR decode_layer (next version): v8-v12 run state["qk_norm"] + k/v .to(FP8) + store_cache, the same 4-5 launches.
+Swap in v13's _norm_rope_store_kernel (it takes the same cos_sin table). With FP8 q (v14) the FA3 verify path drops a cast too. Expected
+about -3 to -5 us per decode-layer call, on every shape.
+Next (attention): the r2 nits (_nsplit docstring 225 keys, dead NSPLIT_P2 masking) are still open in the attention file (sent files are not edited), so fix them in v15. Fold the split combine into the split kernel (last-arriving program via an atomic counter) to save ~1-2 us per decode shape;
+fold the fused norm/RoPE into the split kernel's q load for decode (q_len 1).
+
 ## Oct 29 ~1:30-1:45 AM ET: decode_layer with the v24 CUDA experts (branch decode-moe-cuda, off moe-cuda-mma)
 MoE v24 was SUBMITTED by the parent after Senior Larper's r4 approval: job d625bb2af63b43c1, 1.380x.
 Board decode_layer 1.202x (v6). decode checks this session: 4 (v9-v12); 5/20 in the window.
