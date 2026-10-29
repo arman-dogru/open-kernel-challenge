@@ -1,0 +1,5 @@
+#!/bin/sh
+# Exact build commands for the attention v16 exploration files (tools/build_attn_v16.py). Usage: sh tools/build_attn_v16.sh [outdir]
+O=${1:-muse_attention_decode/runs}
+python3 tools/build_attn_v16.py "$O/v16a_fullverify.py" 'v16a (exploration): v15b with full-layer verify blocks at batch >= 2 on the split-KV head kernel (GQA-packed: one program per (KV head, split, request) holds all 8 tokens x 8 query heads of the group, so each K/V tile is loaded once for 64 query rows) with ~16 programs per SM: batch <= 24 BLOCK_N 64 / 4 warps, above BLOCK_N 128 / 8 warps; V load hoisted. (v15a ran it at ~4 programs/SM: 0.67-0.69x FA3.)' head,64,4,3,16,1 head,128,8,3,16,1 24
+python3 tools/build_attn_v16.py "$O/v16b_fullverify.py" 'v16b (exploration): as v16a (check 3914e9a2ce234492: b16 BLOCK_N 64 / 4 warps / ~16 per SM 0.863x FA3, b32 BLOCK_N 128 / 8 warps 0.411x), now batch <= 24 BLOCK_N 128 / 4 warps / 2 stages and above BLOCK_N 64 / 4 warps / 3 stages, both ~16 programs per SM, V load hoisted.' head,128,4,2,16,1 head,64,4,3,16,1 24

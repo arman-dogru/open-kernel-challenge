@@ -54,3 +54,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 03:27:29	check	28ad328cf5284948	muse_attention_decode	muse_attention_decode/runs/v15a_verify_split.py	499fe7a8007ad4986db3bf9ac0c65f0d54afc705622bbf6c2b2d49164e11f05e	4abfe28
 2026-10-29 03:33:44	check	ab5f387ae32242ba	muse_attention_decode	muse_attention_decode/runs/v15b_verify_route.py	2196e01c425bce7c3f42c79e9366e8836ef25ec930d23078ad6228d6b12d1a71	616fb66
 2026-10-29 03:51:05	submit	8f7ac0501b5849d7	muse_attention_decode	muse_attention_decode/runs/v15b_verify_route.py	2196e01c425bce7c3f42c79e9366e8836ef25ec930d23078ad6228d6b12d1a71	5ced66c
+2026-10-29 03:58:46	check	3914e9a2ce234492	muse_attention_decode	muse_attention_decode/runs/v16a_fullverify.py	9e646b05bd0696dfe855ddb81d92d6399e8eb148aacc3a5bcb210dd5c9a47fa7	f6b6bb3
