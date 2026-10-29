@@ -4,3 +4,5 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-28 19:44:08	check	1c3e09378cc0443a	muse_bf16_proj	muse_bf16_proj/runs/v7_audit_nits.py	95340c7e18ff189383e9f3a26d4de7ce02032842967719fc7f8cfdb11fa8196f	3a9173d
 2026-10-28 19:44:08	check	85e6332651ba4603	muse_attention_decode	muse_attention_decode/runs/v11_smooth_split.py	b832f2f431b7f56f264f571b0aa7ee0adef19dabc20f7b57f02d89311a3d8b6e	3a9173d
 2026-10-28 19:44:08	check	e41c3583fe974851	muse_decode_layer	muse_decode_layer/runs/v7_smooth_split.py	c96fc78c5993d0b8f266f3ae76c45d2518e51b1f6c40b4687a38db99c0a24914	3a9173d
+2026-10-28 22:22:28	check	86a42f76b1164863	muse_attention_decode	muse_attention_decode/runs/v12_nearest_pow2.py	f8a23d04bcfa890cebfac60477cda8835a7a0549c211d5c4615a2815b7e2c652	52ea71e
+2026-10-28 22:22:28	check	9f1742cea00f4460	muse_decode_layer	muse_decode_layer/runs/v8_nearest_pow2.py	ea3b88086cdef7e823c309bfcbc8ba9633163b42bc2822300ef2f5fce149a22f	52ea71e
