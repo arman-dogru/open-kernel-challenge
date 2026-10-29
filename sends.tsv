@@ -6,3 +6,9 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-28 19:44:08	check	e41c3583fe974851	muse_decode_layer	muse_decode_layer/runs/v7_smooth_split.py	c96fc78c5993d0b8f266f3ae76c45d2518e51b1f6c40b4687a38db99c0a24914	3a9173d
 2026-10-28 22:22:28	check	86a42f76b1164863	muse_attention_decode	muse_attention_decode/runs/v12_nearest_pow2.py	f8a23d04bcfa890cebfac60477cda8835a7a0549c211d5c4615a2815b7e2c652	52ea71e
 2026-10-28 22:22:28	check	9f1742cea00f4460	muse_decode_layer	muse_decode_layer/runs/v8_nearest_pow2.py	ea3b88086cdef7e823c309bfcbc8ba9633163b42bc2822300ef2f5fce149a22f	52ea71e
+2026-10-28 22:45:11	check	16374f95f195436b	muse_moe_w4a16	muse_moe_w4a16/runs/v11_triton_packed.py	c0e08e1d71d9766b7ddde79bd9e14e5da0ab963f607f9901446d8fa88bc0c1d2	e4b1f3d
+2026-10-28 22:54:47	check	698ae1d5cbd94a3a	muse_moe_w4a16	muse_moe_w4a16/runs/v12_splitk.py	0da91269b409c3238d59f5907d396221abff4819ff67229f9040c60392af7bf8	19dd489
+2026-10-28 23:09:44	check	e57901fe9def4655	muse_moe_w4a16	muse_moe_w4a16/runs/v14_slots.py	26e907cd7893c3fee6a58b4573062b8a62ffb68ad2de672ca26150bdd32c9ac1	4b21850
+2026-10-28 23:14:56	check	4b804f6c561745bf	muse_moe_w4a16	muse_moe_w4a16/runs/v15_tiled.py	5e50df5e78914e6ab5bcd1c33fcf68a49b5ca2604748e0fae619d5775175eef7	4e3722f
+2026-10-28 23:21:57	check	603e1fdbeed64cac	muse_moe_w4a16	muse_moe_w4a16/runs/v16_persistent.py	2287485b0d44be2fa61cd010f10783e613a0b85bc00f193e43eadee8287b411d	7f99677
+2026-10-28 23:28:02	check	c8a9842f36014fa0	muse_moe_w4a16	muse_moe_w4a16/runs/v17_occupancy.py	803518baac5982e17dd4ee1199c1af7aa0bcb1d39a462fd35536661b9711f5a0	ef39c26
