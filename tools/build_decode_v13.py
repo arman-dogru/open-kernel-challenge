@@ -1,3 +1,4 @@
+"""Builds muse_decode_layer/runs/v13_fused_attn.py from v12_precompile.py + attention v14b. Run from the repo root."""
 import re
 S = open("muse_decode_layer/runs/v12_precompile.py").read()
 A = open("muse_attention_decode/runs/v14b_docfix.py").read()
@@ -83,4 +84,5 @@ r4 n6 (hidden_states alignment assert), r4 n9 (FP32 intermediates note).
 
 v12:''')
 S = S.replace("  FusedQKNorm (Triton)             per-head RMSNorm", "  FusedQKNorm (Triton)             per-head RMSNorm", 1)
+S = rep(S, "_NORMS = {}\n_ROPE = {}\n", "")  # v14 dead caches
 open("muse_decode_layer/runs/v13_fused_attn.py", "w").write(S)
