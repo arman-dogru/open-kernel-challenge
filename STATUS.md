@@ -34,6 +34,25 @@ decode-v13-fused (base attn-fused): v13, for review.
   send time, i.e. they were back-filled after the fact. The v7_audit_nits row has commit 'dedupe' and a sha256 that does
   not match the file. They are left as recorded and not rewritten; treat them as unverified history.
 
+## Why profile .log files are empty (review round 13)
+The `profiles/<file>.<job>.log` that okc saves next to each run holds the last 16,000 characters the submission
+printed (`log_tail` in `okc status --json`). It is not a judge log. Our kernels print nothing: the BENCH
+exploration code that printed timings was removed in review round 10, and printing inside kernel_fn is not allowed
+(a tensor print would sync). So the .log files are empty (0 bytes), and an empty one means "no output". It does
+not mean a capture failure. tools/okc_send.py cannot add anything, because the file holds the run's own stdout.
+Options, not done: a one-line prepare()-time print in future kernel versions (torch / triton versions, path flags
+such as FASTSCALE or grouped_ok), which would make the .log useful for checking the judge's environment, e.g.
+torch._grouped_mm availability. That changes the kernel file, so it belongs in a new vN, not a retro-edit.
+
+## Oct 29 ~3:46-4:01 PM ET: decode v20 / attention v17 (branch decode-v20; folded into main via status-r13)
+- tools/rows_prefetch_patch.py (shared), tools/build_decode_v20.py, tools/build_attn_v17.py. The full-decode
+  (batch >= 2) split-KV "rows" kernel runs on 128-key tiles and loads the next tile's page indices one iteration
+  ahead (PREF). Plus #17 nits: the NB 2 comment now says "from 81 tokens"; the dead NB == 4 MINB branch is removed.
+- decode v20 check 5fa280a493f244a3: 1.366x (1.345-1.386); rows kernel 257 -> 245 us at decode 32 full, b16 flat.
+  attention v17 check 8deec285efbe4b57: 1.398x (1.377-1.424); decode 32 full 264 -> 249 us. Neither clears its PR
+  bar (decode 1.385, attention 1.409). The pages are randomly permuted, so each key is two random 128-byte reads;
+  ~2.6 TB/s is near what that access pattern gives.
+
 ## Oct 29 ~2:36-3:00 PM ET: leaderboard gaps; decode v18 / v18b; MoE v26e (Arman: climb incrementally, keep afloat)
 Leaderboard (public board, ~2:40 PM ET; overall rank 754 / 1589):
 
@@ -84,11 +103,13 @@ Follow-ups (~3:05 PM ET, status-r11):
   reference only; nothing builds on it.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:53 PM ET (supersedes the ~2:45 PM line)
+(Current as of ~2:53 PM ET. Later per-round counts are in each round's section; quotas reset at 8 PM ET.)
 - Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 2 (after v26e b8a324016b7b4422), decode_layer 7
   (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
 - Scored runs left: bf16 10, attention 8, MoE 7 (after the v26e submit), decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26e 94cff1d839e947df 1.539x, MoE v26c
   7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
-## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
+
+## HISTORICAL (superseded by the Quotas section above; kept unedited per the no-silent-deletion rule): Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
 - Checks used: bf16 19 of 20 (v27 x2 this session; 2 pre-check rejections created no job); attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
 - Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
