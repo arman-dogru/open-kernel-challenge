@@ -67,3 +67,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 05:03:06	submit	6a55705a372f40ac	muse_decode_layer	muse_decode_layer/runs/v17_fused_chain.py	67dbbe1470a875d47497539485365ddebd8d47e417a105c3ea024b48a89b691c	71a8c73
 2026-10-29 14:48:38	check	b8a324016b7b4422	muse_moe_w4a16	muse_moe_w4a16/runs/v26e_nb2_evict.py	31a3254249dfa680495bb6f0edd7bf2b9a0c65f896e0ff6cbd3ec084b00d5179	252697a
 2026-10-29 15:21:43	check	b7acb3f79b594fc7	muse_decode_layer	muse_decode_layer/runs/v19_nb2_256_evict.py	d70c6c3ebea2f611ca42f54ed10a301667444f512aeacce5e82057d471d1cdf6	b91650d
+2026-10-29 15:25:08	check	e27dac5ab7d24e63	muse_decode_layer	muse_decode_layer/runs/v19b_nb2_minb2.py	35f2508ecc7370f155114982194dd5b83b97cf41d8080d4ec739d73b52ada393	079a320
