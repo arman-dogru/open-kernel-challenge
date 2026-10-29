@@ -35,3 +35,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 01:34:10	submit	d625bb2af63b43c1	muse_moe_w4a16	muse_moe_w4a16/runs/v24_tuned.py	9cba0e2bb6a650d8fead2a7548d15ba96ab8fdf61cd39d0c9319f8948419dad4	dd570f2
 2026-10-29 01:34:57	check	4e2d567c86e84404	muse_decode_layer	muse_decode_layer/runs/v11_rmsnorm_all.py	4db52119f88eda1ed30e95d85c96c42b5d271a23b3d240fe795b4d7c240bdc9d	ea3b527
 2026-10-29 01:37:27	check	ff2c439e12e54f31	muse_decode_layer	muse_decode_layer/runs/v12_precompile.py	b934cc00c842f1c2db0a98d68ff9fef7deda5ee7c70c48cb95a558690ef5c14c	c4c326c
+2026-10-29 01:42:33	check	ed743d60bec04ad8	muse_attention_decode	muse_attention_decode/runs/v13_fused_store.py	946f38729b14889d22c2ae086670ec1b0fcc80f4f40077f1055b3baad4aa3054	a152f37
