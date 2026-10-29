@@ -26,9 +26,20 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
 ## Oct 29 ~12:20 AM ET resume (successor worker)
 - Branch moe-packed-dequant pushed (was local only). bf16 v8/v9/v10 checks: 1.061x / 0.727x / 0.769x (all
   below the board 1.115x; stream-K and the 12-bit lossless weights lose to cuBLAS) -> bf16 parked.
-- MoE v18_gemv (check a428ce02220746c9): CUDA-core grouped split-K GEMV for bs <= 32 (1-8 routes per
-  expert; no tensor cores, so no smem/wgmma round trip), Marlin v9b path for bs 128/256. Its prepare()
-  prints a config bench (BENCH lines in the .log) vs Marlin on synthetic routings; exploration only.
+- MoE v18_gemv (check a428ce02220746c9): 0.577x. CUDA-core grouped split-K GEMV for bs <= 32, Marlin for
+  bs 128/256. bs1 66.6 us (Marlin 52.9), bs8 352, bs16 742, bs32 1289 us. Bound by x loads (~1 per weight
+  per route: 3-D [route,row,word] tiles put one row per thread) -> LSU-bound, scales with routes.
+- MoE v19_gemv_rows (check e99c9700c7754496): 0.220x. 2-D tiles, many rows per thread, one accumulator per
+  route: the 16-output dequant asm is materialised for all rows before the FMAs -> 160-255 registers and
+  heavy spills (up to ~3000). Even unspilled (32,32,4,4) MB=1: bs1 74.8 us vs Marlin 55.1 us (in-prepare bench).
+  Verdict: Triton CUDA-core GEMV can't hold the dequantised weights in registers; with the earlier tensor-core
+  tries (v11-v17) MoE-in-Triton is a dead end at 8 checks. Only a hand-written CUDA kernel could compete.
+- bf16 v11_cublas_bench (check ae407efff6954988): 1.132x (= v7 path; CI 1.115-1.149). In-prepare bench:
+  cuBLAS with pre-transposed weights (torch.mm(x, W.t().contiguous())) is ~1 us faster on pooler (all m) and
+  unpooler m16/32; nothing beats SGLang's cuBLAS on qkv_gate; v7's Triton stays best on o.
+- bf16 v12_bench_probe (check b8e3f1ba63b044c5): same bench at m=128/256 + probe of in-process JIT toolchains
+  (cupy / cuda-python NVRTC / CuTe DSL / tilelang) in the judge image, to see whether a hand-written CUDA
+  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed).
 
 ## MoE Triton rewrite (branch moe-packed-dequant; check-only so far, none beats Marlin yet)
 | check | file | speedup | what changed |
