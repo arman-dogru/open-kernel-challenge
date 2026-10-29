@@ -59,3 +59,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 04:38:35	check	bbebbbdf181f4934	muse_moe_w4a16	muse_moe_w4a16/runs/v26a_int_splat.py	196c6708eb8b18fc3a1a40bdbc1540b0d6801ead9124201f0f6cc2c940b80203	05d6779
 2026-10-29 04:49:09	check	f479a34c48984e24	muse_moe_w4a16	muse_moe_w4a16/runs/v26c_fused_chain.py	85fe5e71ccae07e165f10e01c435f8ee97cf773780aa43624cd71b4fd452eeeb	8bd9599
 2026-10-29 05:03:00	submit	7eaa9622f391455b	muse_moe_w4a16	muse_moe_w4a16/runs/v26c_fused_chain.py	85fe5e71ccae07e165f10e01c435f8ee97cf773780aa43624cd71b4fd452eeeb	377f1f0
+2026-10-29 14:48:38	check	b8a324016b7b4422	muse_moe_w4a16	muse_moe_w4a16/runs/v26e_nb2_evict.py	31a3254249dfa680495bb6f0edd7bf2b9a0c65f896e0ff6cbd3ec084b00d5179	252697a
