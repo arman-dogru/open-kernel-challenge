@@ -45,3 +45,5 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 02:37:50	check	9e6108c9e3724ee9	muse_bf16_proj	muse_bf16_proj/runs/v7_audit_nits.py	95340c7e18ff189383e9f3a26d4de7ce02032842967719fc7f8cfdb11fa8196f	dedupe
 2026-10-29 02:38:30	check	41a723aa68fe4d79	muse_bf16_proj	muse_bf16_proj/runs/v22_router_regime.py	97a3729b44d0eb0ee9b9e7744fa62ab0b3d99b5577e50bbcfd9731b26fa53b8b	b9baa40
 2026-10-29 02:41:36	check	42f8408fae1a4a8b	muse_bf16_proj	muse_bf16_proj/runs/v23_tma_bulk.py	5088ac42b718a957b78ffbeb7d8dacd3db6e77d9879e97e4fcecf6a5232cbb86	33b8efc
+2026-10-29 02:43:43	check	77cfc7faa257400c	muse_bf16_proj	muse_bf16_proj/runs/v24_tma_route.py	0d17aa1222cf3db8fa98301d2b96de3e55768d41f234eda2325885d656bd8116	b5e1897
+2026-10-29 02:44:06	submit	093c2ebc301344e8	muse_decode_layer	muse_decode_layer/runs/v13_fused_attn.py	106b7d8773faa722d9dbd345273b512c44f629e8753b1c948f4f4bdbccdc2ab4	b5e1897
