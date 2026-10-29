@@ -23,11 +23,21 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
-- Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b); MoE 15 of 20 (v25, v25b); decode_layer 7 of 20 (v14 this session)
+- Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b); MoE 15 of 20 (v25, v25b); decode_layer 9 of 20 (v14, v15a, v15b)
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~3:45-3:55 AM ET: decode_layer v15 experts (branch decode-v15, off decode-v14). No gain; no PR.
+| job | file (sha, build script, byte-exact at HEAD before send) | speedup (95% CI) | notes |
+|---|---|---|---|
+| 75b0321a5df9459d | v15a_moe_bench.py (9552ad35…, tools/build_decode_v15a.py, a7aa618) | 1.281x (1.262-1.300) | CHECK-ONLY: v14 kernel_fn + in-prepare bench on synthetic heavy-tailed routings. 32 tokens (49 local routes, 13 experts): Marlin bm8/16/32 178.5/178.6/224.6 us; CUDA NB1 W8 S4 160.4, W16 S4 160.0, W8 S2 169.9, W4 S4 168.0, W8 S8 171.4, PF4 178.1, NB2 175.5-192.2 (NB2 S2 / NB4: smem overflow). 128: Marlin bm 8/16/32/48 457/340/350/408. 256: bm 16/32/48/64 441/459/506/579 |
+| 9f9021db0ad24f79 | v15b_moe32.py (1a77cb2b…, tools/build_decode_v15b.py, eb6a018) | 1.259x (1.240-1.278) | CUDA experts at 17-32 tokens (NB1 W16 S4) + Marlin bm16 at 65-383. Worse: decode 32 sliding 1.086 (moe_mma 122.7 us vs Marlin 125.1 in v14, but the layer wall went 232.6 -> 238.5 us: extra small launches), verify 32 Marlin 474 / 451 us at bm16 vs 435.6 at bm32 (v14) |
+- Lesson: the synthetic heavy-tailed routing (49 local routes at 32 tokens, 377 at 256) does not represent the judge's
+  layer routing (~32 / ~256 local routes); bench rankings from it did not transfer. Next time, bench with
+  uniform routing too (or take topk from the layer's own router on random activations).
+- v14 stays the best decode file (1.278x check, not submitted). Board 1.251x (v13).
 
 ## Oct 29 ~3:40-3:50 AM ET: decode_layer v14 (branch decode-v14, off attn-v15). Within noise of v13; no PR.
 | job | file | speedup (95% CI) | notes |
