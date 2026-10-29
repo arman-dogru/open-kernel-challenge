@@ -29,6 +29,30 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:35-5:00 AM ET: MoE v26a (branch moe-v26 off origin/bf16-wgmma 0b2cd87; moe-v25 is its ancestor)
+- bf16 wgmma is PARKED (Arman) until a cluster/DSMEM-reduction or producer-warp design; v28/v29 notes below.
+- Where small-batch MoE time goes (judge routing, generate_input dist "normal", busiest GPU, 200 CPU seeds): bs32 touches
+  16.2 local experts (10-23), 50 routes, hottest expert 14.7 tokens, half the touched experts get 1 token; bs16 12.1 experts,
+  bs8 8.5, bs1 2.6. At 28.3 MB of NVFP4 per expert, v24/v25b ran ~10.6-11.7 us per expert (~2.5-2.7 TB/s) at bs8-32, so
+  the gap is weight-streaming efficiency at every small bs, not a bs32-only issue. v23's in-prepare bench (normal routing, not
+  skewed) showed NB 2 costing +8% (bs32) / +11% (bs16): extra MMAs + B loads alone slow it, so moe_mma is issue-bound.
+- Fix: the E4M3 scale splat (8 per 16 x 64 tile, ~5 ops each) becomes PRMT + IMAD: for a positive normal byte b,
+  bf16(e4m3(b) * 2^119) == (b << 4) + (239 << 7) per half, exact (checked on CPU for all 119 bytes 0x08..0x7E, and the
+  macro with byte_perm emulated on 20k random scale words). prepare() checks every local scale byte is 0x08..0x7E (judge
+  weights: clamped to [8, 448], or >= 2^-6 with wide scales) else compiles v24's cvt path. Output bit-identical to v24's.
+  GATED moe_mma PTX 4194 -> 3171 instructions (-24%), 0 spills, same registers. tools/build_moe_v26.py -> v26a, byte-exact.
+- Check bbebbbdf181f4934 (sha 196c6708..., commit 05d6779): 5/5, 1.457x (95% 1.435-1.479) vs board v24 1.380x, v25b 1.391x.
+  | load | SGLang | v26a | x | v25b x |
+  |---|---|---|---|---|
+  | decode 1 | 79.7 | 41.7 | 1.914 | 1.809 |
+  | decode 16 | 194.0 | 129.2 | 1.502 | 1.391 |
+  | decode 32 | 213.4 | 175.0 | 1.219 | 1.117 |
+  | verify 1 (8 tok) | 150.4 | 97.6 | 1.542 | 1.423 |
+  | verify 16 (128, Marlin) | 463.0 | 340.1 | 1.361 | 1.371 |
+  | verify 32 (256, Marlin) | 617.3 | 474.1 | 1.302 | 1.322 |
+  CI lower 1.435 > 1.40 -> PR #9 opened against bf16-wgmma (the branch base); not submitted. Remaining headroom: bs32 still
+  ~10.9 us per expert; next levers are the E2M1 code unpack (rotl + mask per a-register) and launch gaps (5 launches).
+
 ## Oct 29 ~4:30-5:00 AM ET: bf16 v28 checked (Arman: spend the expiring check), v29 built offline (not sent)
 - v28 check c20bde96ace6489d (sha 3613a8de..., commit 56d3628): 9/9 passed, 0.915x (95% 0.901-0.928); v27 was 0.927x, v17 1.133x.
   m=8-32 per shape, median us / speedup (v17 | v27 | v28):
