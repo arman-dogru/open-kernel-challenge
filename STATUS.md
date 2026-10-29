@@ -39,7 +39,24 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
   unpooler m16/32; nothing beats SGLang's cuBLAS on qkv_gate; v7's Triton stays best on o.
 - bf16 v12_bench_probe (check b8e3f1ba63b044c5): same bench at m=128/256 + probe of in-process JIT toolchains
   (cupy / cuda-python NVRTC / CuTe DSL / tilelang) in the judge image, to see whether a hand-written CUDA
-  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed).
+  kernel can be compiled without starting a process (load_inline runs nvcc = a process, not allowed) [CORRECTION, review r4 nit 7: the rules page says native CUDA should be compiled in-file with PyTorch load_inline, so it IS allowed; we use CuPy/NVRTC either way].
+
+## Oct 29 ~1:30-1:45 AM ET: decode_layer with the v24 CUDA experts (branch decode-moe-cuda, off moe-cuda-mma)
+MoE v24 was SUBMITTED by the parent after Senior Larper's r4 approval: job d625bb2af63b43c1, 1.380x.
+Board decode_layer 1.202x (v6). decode checks this session: 4 (v9-v12); 5/20 in the window.
+| check | file | speedup | note |
+|---|---|---|---|
+| 62ed09f29fd74783 | v9_moe_cuda.py | 1.219x (1.200-1.237) | v24 experts at <=32 tokens + bf16 v17 pooler/unpooler routes. Gains at 1-16 tokens; at 32 agentic tokens moe_mma 127.5 us vs Marlin 124.3, and the cuBLAS-T unpooler lost at 128/256 |
+| d761340c8ec04009 | v10_route.py | **1.243x (1.225-1.262)** | CUDA experts at <=16 tokens only, v8 projections, Triton pre-expert RMSNorm (torch's took 6 us) |
+| 4e2d567c86e84404 | v11_rmsnorm_all.py | 1.234x | Triton RMSNorm at every token count: within noise, not carried |
+| ff2c439e12e54f31 | v12_precompile.py | see PR #3 | v10 + r4 m1 (get_function on every kernel in prepare). Candidate |
+Per shape for v10:
+- 1 token: 1.39x; 16 tokens: 1.25-1.31x; verify 8 tokens: 1.35-1.37x.
+- 32 tokens: 1.07/1.17x; 128 tokens: 1.15-1.20x; 256 tokens: 1.11-1.18x.
+Next (decode_layer):
+1. 32 tokens sliding is 1.065x, the weakest shape. The MoE kernel ties Marlin there; it needs NB=2 work items or the issue-bound fixes from the MoE notes.
+2. Verify 128/256 tokens use Marlin + FA3. Try v24-style tensor-core experts with NB=4 for 128 tokens.
+3. Fuse the CUDA-expert prologue: zero buffer + route_prep + silu_mul + post-norm is about 4 launches.
 
 ## Oct 29 ~1:15-1:30 AM ET: bf16 CUDA GEMV session (branch moe-packed-dequant). Nothing beats the board clearly.
 Board entry 1.115x (v7). bf16 checks used in this session: 6 (11/20 in the window since 8 PM ET).
