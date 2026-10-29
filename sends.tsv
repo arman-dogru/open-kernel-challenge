@@ -77,3 +77,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 15:41:57	submit	7b69b2fcfffb40dd	muse_prefill_layer	muse_prefill_layer/runs/v2b_dequant_grouped.py	d0b2cc111752af1414674082c7b2aa653a785e4d3c33f5583b093148b49d40ff	99e0c27
 2026-10-29 15:42:03	submit	7702cb83b35b4737	muse_decode_layer	muse_decode_layer/runs/v19_nb2_256_evict.py	d70c6c3ebea2f611ca42f54ed10a301667444f512aeacce5e82057d471d1cdf6	1e4fd5c
 2026-10-29 16:47:41	check	77bcf164955a4ca3	muse_attention_decode	muse_attention_decode/runs/v20_verify_tiles.py	727ad971fbb73bf753e22c275e4c2e9354e2faedf83e34905a3ad1326c430f1e	d6bf3b4
+2026-10-29 16:54:22	check	278e0857f453409b	muse_attention_decode	muse_attention_decode/runs/v20b_verify_pref64.py	27bdf39031d87872dd2c55bb585267bf7b8bf18262dedd67282af4739c57294b	8feba1b

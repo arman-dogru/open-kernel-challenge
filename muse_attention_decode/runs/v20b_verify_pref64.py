@@ -1,6 +1,6 @@
 # okc: problem=muse_attention_decode
-"""v20: v17 + the per-token norm/RoPE/store kernel from 64 tokens and sliding verify on 128-key head-kernel
-tiles with V hoisted and next-tile page-index prefetch. See tools/build_attn_v20.py.
+"""v20: v17 + the per-token norm/RoPE/store kernel from 64 tokens and sliding verify on 64-key head-kernel
+tiles (v20b) with V hoisted and next-tile page-index prefetch. See tools/build_attn_v20.py.
 
 v17: v15b with the full-decode (batch >= 2) split-KV "rows" config on 128-key tiles and the next tile's page
 indices loaded one iteration ahead (PREF), as decode v20. Same math and precision.
@@ -434,7 +434,7 @@ def _attn_path(kind, L, batch, hkv, d):
             return None
         if kind == "full" and batch >= 2:
             return None  # FA3 (split-KV head kernel 0.67-0.69x of it at b16/32, check 28ad328cf5284948)
-        if kind == "sliding":  # v20: 128-key tiles (3 serial steps per 257-key split, not 5), V hoisted, PREF
+        if kind == "sliding":  # v20b: v17's 64-key tiles, V hoisted, PREF (128-key tiles were slower)
             return ("head", 64, 4, 3, 4, True)
         return ("head", 64, 4, 3, 4, False)
     if kind == "sliding":

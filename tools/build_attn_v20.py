@@ -78,5 +78,9 @@ sub('''            return None  # FA3 (split-KV head kernel 0.67-0.69x of it at 
 sub('# okc: problem=muse_attention_decode\n"""v17:', '# okc: problem=muse_attention_decode\n'
     '"""v20: v17 + the per-token norm/RoPE/store kernel from 64 tokens and sliding verify on 128-key head-kernel\n'
     'tiles with V hoisted and next-tile page-index prefetch. See tools/build_attn_v20.py.\n\nv17:')
+if '"head", 64,' in VERIFY_CFG:  # v20b (tools/build_attn_v20b.py): describe the 64-key tiles it builds
+    s = s.replace("sliding verify on 128-key head-kernel\ntiles with V hoisted", "sliding verify on 64-key head-kernel\ntiles (v20b) with V hoisted")
+    s = s.replace("# v20: 128-key tiles (3 serial steps per 257-key split, not 5), V hoisted, PREF",
+                  "# v20b: v17's 64-key tiles, V hoisted, PREF (128-key tiles were slower)")
 open(sys.argv[1] if len(sys.argv) > 1 else DST, "w").write(s)
 print("ok")
