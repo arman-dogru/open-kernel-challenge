@@ -31,3 +31,5 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 01:24:37	check	febf8e4adb9c4e1a	muse_bf16_proj	muse_bf16_proj/runs/v17_best_route.py	9f56573b6e19ab585c2a2b63ab4e04a775470dbea9cdb602cdd8da3eb4838d47	8d34c13
 2026-10-29 01:26:41	check	14ba8a134b084788	muse_bf16_proj	muse_bf16_proj/runs/v18_dbuf.py	7b8931a7ca240b667427381bbca4f49b36fbd370eea43442f5194ee6c4b7c5b6	e8d5883
 2026-10-29 01:29:24	check	62ed09f29fd74783	muse_decode_layer	muse_decode_layer/runs/v9_moe_cuda.py	02e16cae04881ead7e76cf053bfbcaf130edcd3f992f16a3721b6cc37f1a82dc	d63231f
+2026-10-29 01:32:33	check	d761340c8ec04009	muse_decode_layer	muse_decode_layer/runs/v10_route.py	769b1e5f6b700466a39e325c3be22f8353a7b065c7de8dbe645b9bdc293c648e	dd570f2
+2026-10-29 01:34:10	submit	d625bb2af63b43c1	muse_moe_w4a16	muse_moe_w4a16/runs/v24_tuned.py	9cba0e2bb6a650d8fead2a7548d15ba96ab8fdf61cd39d0c9319f8948419dad4	dd570f2
