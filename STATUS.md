@@ -60,10 +60,21 @@ to v26c), + review round 10 minors. Check b8a324016b7b4422 scored **1.546x (1.52
 (median us). The whole gain is at verify16 (NB 2, -12 to -15%). Evict-first is neutral on the bandwidth-bound
 small shapes. Not submitted, no PR opened (for Arman / Larper).
 
+Follow-ups (~3:05 PM ET, status-r11):
+- Larper approved PR #14 (moe-v26e). Arman submitted v26e at 2:59 PM ET as job 94cff1d839e947df: 1.539x (1.516-1.562),
+  5/5 tests. The CI lower bound does not clear the old board entry's upper bound (1.523), so this is not recorded as
+  a significant improvement. It is the new board entry (point estimate +0.039x over v26c 1.500x).
+- NB 2 GEMM-1 (gated, W8, MINB 3) under NVRTC -Xptxas -v: 80 registers, a 24-byte spill with FASTSCALE (16 bytes
+  without), 33 KB shared. The NB 2 GEMM-2 kernel: 62 registers, no spill. Same in decode v18 / v18b and MoE v26e.
+- sends.tsv rows and profiles for checks 9566de62f7e94ed1 / ae89a962123748e6 (decode v18 / v18b), b8a324016b7b4422
+  (v26e), the v26e submit, and v26c f479a34c48984e24 / 7eaa9622f391455b are recorded here (review round 11 m1).
+- moe-v26d is a stale offline experiment: cp.async activation staging, projected ~0%, never checked. It is kept for
+  reference only; nothing builds on it.
+
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:53 PM ET (supersedes the ~2:45 PM line)
 - Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 2 (after v26e b8a324016b7b4422), decode_layer 7
   (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
-- Scored runs left: bf16 10, attention 8, MoE 8, decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26c
+- Scored runs left: bf16 10, attention 8, MoE 7 (after the v26e submit), decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26e 94cff1d839e947df 1.539x, MoE v26c
   7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
