@@ -1,0 +1,27 @@
+BENCH T=32 local_routes=49 experts=13 max_per_expert=15
+BENCH T=32 marlin block_m=8 178.5us
+BENCH T=32 marlin block_m=16 178.6us
+BENCH T=32 marlin block_m=32 224.6us
+BENCH T=32 cuda NB=1 W=8 S=4 PF=2 160.4us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=1 W=8 S=2 PF=2 169.9us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=1 W=4 S=4 PF=2 168.0us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=1 W=16 S=4 PF=2 160.0us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=1 W=8 S=8 PF=2 171.4us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=2 W=8 S=4 PF=2 175.5us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=2 W=8 S=2 PF=2 error CompileException: ptxas error   : Entry function 'moe_mma' uses too much shared data (0x10100 bytes, 0xc000 max)
+�
+BENCH T=32 cuda NB=2 W=4 S=4 PF=2 192.2us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=1 W=8 S=4 PF=4 178.1us err_vs_marlin=0.0054
+BENCH T=32 cuda NB=4 W=8 S=4 PF=2 error CompileException: ptxas error   : Entry function 'moe_mma' uses too much shared data (0x10200 bytes, 0xc000 max)
+�
+BENCH T=128 local_routes=236 experts=18 max_per_expert=128
+BENCH T=128 marlin block_m=8 457.4us
+BENCH T=128 marlin block_m=16 339.8us
+BENCH T=128 marlin block_m=32 349.7us
+BENCH T=128 marlin block_m=48 408.2us
+BENCH T=256 local_routes=377 experts=23 max_per_expert=109
+BENCH T=256 marlin block_m=16 441.3us
+BENCH T=256 marlin block_m=32 459.0us
+BENCH T=256 marlin block_m=48 506.1us
+BENCH T=256 marlin block_m=64 579.2us
+BENCH done in 10s
