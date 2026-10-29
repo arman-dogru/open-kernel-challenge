@@ -25,7 +25,7 @@ main, waiting on Arman. #6 attn-v15 (attention v15b, submitted by Arman). #7 bf1
 PRs for the held bf16 / MoE sessions (both approved). Next PR is #9.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
-- Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
+- Checks used: bf16 17 of 20; attention 8 of 20 (v15a, v15b; v16a-c); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
@@ -37,6 +37,15 @@ Board: v15b 1.385x (1.364-1.409), submitted by Arman (8f7ac0501b5849d7). Files b
 | job | file (sha) | speedup (95% CI) | full verify b16 / b32 |
 |---|---|---|---|
 | 3914e9a2ce234492 | v16a_fullverify.py (9e646b05…) | 1.179x (1.161-1.197) | b16 head BN64 w4 s3 ~16/SM: 0.863x (attn_split 227.8 us vs FA3 ~191); b32 BN128 w8: 0.411x (933 us) |
+| 0e7a5ed370284884 | v16b_fullverify.py (ba553929…) | 1.286x (1.267-1.310) | b16 head BN128 w4 s2: 0.736x; b32 head BN64 w4 s3 ~16/SM: 0.874x |
+| d97b56e20552413e | v16c_pair.py (cf60fd09…) | 1.135x (1.118-1.156) | new _attn_split_pair (both KV heads per program, whole 128 B rows): b16 w8 0.361x (554 us), b32 w4 0.710x (526 us) |
+- Result: nothing beats FA3 on full verify at b16/32; best is the GQA-packed head kernel at BN64 / 4 warps / ~16 per SM
+  (0.86-0.87x). Loading whole rows (pair) made it worse, so the access pattern is not the limit: the 64-row tile is
+  compute/issue bound in Triton (FP8 Q.K, then softmax + V FP8->BF16 convert + BF16 P.V per 64-key tile; FA3 runs P.V in
+  FP8, which we don't do: no further precision cuts). v15b (FA3 there) stays the board file; no PR.
+- Next (untested): a hand-written wgmma kernel (FP8 Q.K + BF16 P.V, warp-specialized producer with cp.async gathers) is the
+  remaining route; Triton configs are exhausted (BN 64/128, 4/8 warps, 2/3 stages, 4/16 per SM).
+- Quota: attention checks 8 of 20 used today (3 this session); 12 left.
 ## Oct 29 ~3:25-3:40 AM ET: attention_decode v15 (branch attn-v15, off moe-v25) -> PR #6
 | job | file | speedup (95% CI) | notes |
 |---|---|---|---|
