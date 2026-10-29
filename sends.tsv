@@ -60,3 +60,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 04:41:57	check	b94ed32acfce4452	muse_decode_layer	muse_decode_layer/runs/v16_int_splat.py	a1057a4381c2abd5f63b0176e5b1c6492ec36b71f5ba3ddee7e73ee4bfb63e63	7bdc9bc
 2026-10-29 04:54:09	check	5dbee2e16e3741f9	muse_decode_layer	muse_decode_layer/runs/v17_fused_chain.py	67dbbe1470a875d47497539485365ddebd8d47e417a105c3ea024b48a89b691c	617b28c
 2026-10-29 05:03:06	submit	6a55705a372f40ac	muse_decode_layer	muse_decode_layer/runs/v17_fused_chain.py	67dbbe1470a875d47497539485365ddebd8d47e417a105c3ea024b48a89b691c	71a8c73
+2026-10-29 14:40:13	check	9566de62f7e94ed1	muse_decode_layer	muse_decode_layer/runs/v18_cuda_experts_256.py	83189386fda66df428a876bffa72c0e8ca0891a86c4ffd5d027949a767fc038d	9bd11b9
