@@ -29,6 +29,36 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:46-5:00 AM ET: MoE v26c (branch moe-v26c off origin/moe-v26 325eb72; built from v26a)
+- Gap census from v26a's profiles (bs 1/8/16/32): moe_mma 36.0/69.8/93.2/157.5 us; outside it silu_mul 2.7-3.8, post-norm
+  3.4-3.7, zero-fill 0.9-3.6, route_prep 1.4-1.6 us, plus 5 inter-kernel gaps: ~9-13 us per call (6-8% at bs16-32,
+  ~20% at bs1). Activation staging sits inside moe_mma (not separable without a profiler) and needs a loop restructure, so
+  the launch chain went first.
+- v26c: 6 -> 4 launches. FP32 sum buffers torch.empty; route_prep runs one block per route and zeroes local routes' GEMM-1
+  (2I) and GEMM-2 (H) rows (block 0 builds the lists). silu_mul removed: GEMM 1 split-K CTAs count arrivals per (work item,
+  row block) in self-resetting int32 counters (state["c1"], zeroed in prepare, reset by the last CTA), and the last CTA
+  writes silu(gate) * up as BF16 for its 16 * WARPS rows with silu_mul's exact expression. Same FP32 sums and SiLU math:
+  bit-identical to v26a up to the FP32 atomic order both already have. __launch_bounds__ minBlocks keeps v26a's occupancy
+  for GATED (8 warps: 4 CTAs/SM at 64 regs, 8 B spill vs v26a's 28 B; 4 warps: 7 CTAs/SM, 72 regs).
+  tools/build_moe_v26c.py -> muse_moe_w4a16/runs/v26c_fused_chain.py, byte-exact at HEAD 8bd9599.
+- Check f479a34c48984e24 (sha 85fe5e71..., commit 8bd9599): 5/5, 1.497x (95% 1.474-1.519) vs v26a 1.457x (1.435-1.479).
+  | load | SGLang | v26c us / x | v26a x |
+  |---|---|---|---|
+  | decode 1 | 79.3 | 40.0 / 1.982 | 1.914 |
+  | decode 16 | 188.0 | 120.4 / 1.561 | 1.502 |
+  | decode 32 | 206.4 | 165.2 / 1.249 | 1.219 |
+  | verify 1 (8 tok) | 151.1 | 93.3 / 1.619 | 1.542 |
+  | verify 16 (128, Marlin) | 464.2 | 338.6 / 1.371 | 1.361 |
+  | verify 32 (256, Marlin) | 614.5 | 468.7 / 1.311 | 1.302 |
+  Lower bound 1.474 is not > 1.48 (bar: v26a's CI upper 1.479): no PR #11. Not submitted. Second MoE check kept.
+- Left outside moe_mma: post-norm sum 3.0-4.1 us, route_prep 2.0-2.8 us. Folding the norm into GEMM 2 needs every local
+  route of a token complete (rows finish in different items): a per-token finisher serializes up to 8 tokens' norms in the
+  last CTA (tail could exceed the 3-4 us kernel); the per-route variant (route-level norm + FP32 atomics into out, per-token
+  counter converts to BF16) nets ~1-2 us and changes the sum order. PDL can't prefetch weights before griddepcontrol.wait
+  (the weight address depends on route_prep's work list), so it would only hide ~1 us of launch latency per boundary. Neither
+  is clearly enough for a check; next real lever is activation staging inside moe_mma (16 KB per CTA from L2 before the loop).
+- (decode v16's STATUS section lives on branch decode-v16 / PR #10.)
+
 ## Oct 29 ~4:35-5:00 AM ET: MoE v26a (branch moe-v26 off origin/bf16-wgmma 0b2cd87; moe-v25 is its ancestor)
 - bf16 wgmma is PARKED (Arman) until a cluster/DSMEM-reduction or producer-warp design; v28/v29 notes below.
 - Where small-batch MoE time goes (judge routing, generate_input dist "normal", busiest GPU, 200 CPU seeds): bs32 touches
