@@ -1,4 +1,4 @@
-# STATUS — updated Oct 29 2026, ~2:30 AM ET
+# STATUS — updated Oct 29 2026, ~2:40 AM ET
 
 **Rules acceptance: 2026-10-28 ~6 PM ET, rules re-accepted by Arman personally via `okc login` (on his own
 Mac); the box's earlier agent-accepted session was logged out and revoked. Submits from here use his token.**
@@ -23,12 +23,23 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv and `okc problems` (~2:27 AM ET)
-- Checks used: bf16 11 of 20; attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20 (v8 9f17, v9-v12, v13 8ddc;
-  the re-send 9a588099434d407f of the same v13 bytes was deduplicated by the judge, "the same code as job 8ddc…",
-  and `okc problems` does not count it).
+- Checks used: bf16 12 of 20 (v19 99cd85; + accidental v7 re-send deduped); attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20
+  (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 1 (v12, b35042c212354b1f, 1.246×),
   attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0. 9 of 10 left on each of those three, 10 on bf16.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~2:30-2:40 AM ET: bf16 session (branch bf16-tma-wgmma, off decode-v13-fused)
+Board 1.115x (v6). bf16 checks left at start: 9 of 20. Goal: CI lower bound > ~1.13.
+| check | file | speedup | note |
+|---|---|---|---|
+| 99cd85adb03b464c | v19_large_triton.py | failed timing (9/9 tests) | Triton o/pooler/router at m=128/256. o 0.675x, pooler 0.561x at m=128; router m=128 OOM (smem 294912 > 232448 with BM=128,BN=32,BK=256). Small-m unchanged (~v7). Verdict: naive Triton at verify sizes loses to cuBLAS; do not carry |
+Also prepared (committed, not yet checked — okc check / git push were blocked by the safety classifier after v19):
+- v20_lib_probe.py / v20b_cute_try.py: discover cutedsl/flashinfer on the judge (CuteDSL TGV is SM100/Blackwell-only; H200 is SM90).
+- v21_router_cfg.py: exact-m router configs (exploration).
+- v22_router_regime.py: regime-level router retune (m<=8 -> BN=32,BK=128,SPLIT_K=4).
+Research note: SGLang's cutedsl_bf16_gemm is Blackwell tcgen05; not usable on H200. qkv_gate still the biggest headroom (wall ~14 us vs SOL 7.9; cuBLASLt nvjet + splitKreduce ~11 us GPU). Hand CUDA GEMV topped out ~3.2 TB/s earlier (v18). Next real attempt needs Hopper TMA+wgmma (SM90), not the SM100 CuteDSL path.
+Quota after this session: bf16 checks 8 of 20 left (1 used: v19; the accidental v7 re-send 9e6108c9e3724ee9 was deduped).
 
 ## Oct 29 ~2:20-2:30 AM ET: decode_layer v13 (branch decode-v13-fused, off attn-fused)
 Built by tools/build_decode_v13.py (reproduces the file byte-exact) from v12_precompile.py + attention v14b.
