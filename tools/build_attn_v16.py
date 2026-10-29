@@ -32,4 +32,17 @@ rep('''        if kind == "full" and batch >= 2:
             return None  # FA3 (split-KV head kernel 0.67-0.69x of it at b16/32, check 28ad328cf5284948)''',
     f'''        if kind == "full" and batch >= 2:  # v16: see the docstring
             return {lit(pa)} if batch <= {split} else {lit(pb)}''')
+if "pair" in (pa + pb):  # the both-KV-heads "pair" kernel (tools/attn_v16_pair_kernel.txt), before the combine
+    rep("@triton.jit\ndef _combine_norm_gate(", (ROOT / "tools/attn_v16_pair_kernel.txt").read_text()
+        + "@triton.jit\ndef _combine_norm_gate(")
+    rep('nsplit = _nsplit(cfg, batch, 1 if which == "rows" else hkv, capacity, occ)',
+        'nsplit = _nsplit(cfg, batch, 1 if which in ("rows", "pair") else hkv, capacity, occ)')
+    rep('''    else:
+        _attn_split[(hkv, nsplit, batch)](''', '''    elif which == "pair":
+        assert hkv == 2
+        _attn_split_pair[(nsplit, batch)](
+            *args, L=L, G=G, HKV=hkv, NSPLIT=nsplit, WINDOW=cfg["window"], BLOCK_M=block_m, BLOCK_N=block_n, D=d,
+            HW=hw, HOIST=hoist, PV16=hw, num_warps=warps, num_stages=stages)
+    else:
+        _attn_split[(hkv, nsplit, batch)](''')
 Path(out).write_text(s)

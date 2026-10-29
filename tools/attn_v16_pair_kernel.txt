@@ -1,0 +1,91 @@
+@triton.jit
+def _attn_split_pair(q_ptr, stride_qt, k_ptr, v_ptr, pt_ptr, stride_pt, seqlens_ptr,
+                     ks_ptr, vs_ptr, o_ptr, lse_ptr, qk_scale, chunk, PAGE,
+                     L: tl.constexpr, G: tl.constexpr, HKV: tl.constexpr, NSPLIT: tl.constexpr,
+                     WINDOW: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+                     D: tl.constexpr, HW: tl.constexpr, HOIST: tl.constexpr = False, PV16: tl.constexpr = False):
+    """v16: the "head" kernel for both KV heads (HKV == 2) of a request in one program: each key's two 64-byte
+    halves of its cache row are loaded together (one full 128-byte row per key, as the decode "rows" kernel),
+    but each KV head's G x L query rows only multiply their own half (no zero padding, no wasted MMAs)."""
+    s = tl.program_id(0)
+    b = tl.program_id(1)
+    HQ: tl.constexpr = HKV * G
+    W: tl.constexpr = HKV * D
+    m = tl.arange(0, BLOCK_M)
+    j = m // G
+    hd = m % G
+    mvalid = m < L * G
+    d = tl.arange(0, D)
+    tq = b * L + j
+    q0 = tl.load(q_ptr + tq[:, None] * stride_qt + hd[:, None] * D + d[None, :], mask=mvalid[:, None], other=0.0)
+    q1 = tl.load(q_ptr + tq[:, None] * stride_qt + (G + hd)[:, None] * D + d[None, :], mask=mvalid[:, None], other=0.0)
+    total = tl.load(seqlens_ptr + b)
+    seq = total - L
+    pos = seq + j
+    if WINDOW > 0:
+        base = tl.maximum(seq - WINDOW + 1, 0)
+    else:
+        base = seq * 0
+    lo = base + s * chunk
+    hi = tl.minimum(lo + chunk, total)
+    if HW:
+        ks = tl.load(ks_ptr)
+        vs = tl.load(vs_ptr)
+    else:
+        ks = tl.load(ks_ptr) * 256.0
+        vs = tl.load(vs_ptr) * 256.0
+    scale = qk_scale * ks * LOG2E
+    m0 = tl.full((BLOCK_M,), float("-inf"), tl.float32)
+    l0 = tl.zeros((BLOCK_M,), tl.float32)
+    a0 = tl.zeros((BLOCK_M, D), tl.float32)
+    m1 = tl.full((BLOCK_M,), float("-inf"), tl.float32)
+    l1 = tl.zeros((BLOCK_M,), tl.float32)
+    a1 = tl.zeros((BLOCK_M, D), tl.float32)
+    for n in range(lo, hi, BLOCK_N):
+        t = n + tl.arange(0, BLOCK_N)
+        tmask = t < hi
+        page = tl.load(pt_ptr + b * stride_pt + t // PAGE, mask=tmask, other=0)
+        row = (page.to(tl.int64) * PAGE + t % PAGE) * W
+        kp = k_ptr + row[:, None] + d[None, :]
+        vp = v_ptr + row[:, None] + d[None, :]
+        k0 = tl.load(kp, mask=tmask[:, None], other=0)
+        k1 = tl.load(kp + D, mask=tmask[:, None], other=0)
+        v0 = tl.load(vp, mask=tmask[:, None], other=0)
+        v1 = tl.load(vp + D, mask=tmask[:, None], other=0)
+        ok = tmask[None, :] & (t[None, :] <= pos[:, None])
+        if WINDOW > 0:
+            ok = ok & (t[None, :] > pos[:, None] - WINDOW)
+        sc = tl.where(ok, tl.dot(q0, tl.trans(_kv(k0, HW, q0.dtype))) * scale, float("-inf"))
+        mn = tl.maximum(m0, tl.max(sc, 1))
+        ms = tl.where(mn == float("-inf"), 0.0, mn)
+        p = tl.exp2(sc - ms[:, None])
+        al = tl.exp2(m0 - ms)
+        l0 = l0 * al + tl.sum(p, 1)
+        if PV16:  # FP8 queries: P.V in BF16
+            a0 = a0 * al[:, None] + tl.dot(p.to(tl.bfloat16), _kv(v0, HW, tl.bfloat16))
+        else:
+            a0 = a0 * al[:, None] + tl.dot(p.to(q0.dtype), _kv(v0, HW, q0.dtype))
+        m0 = mn
+        sc = tl.where(ok, tl.dot(q1, tl.trans(_kv(k1, HW, q1.dtype))) * scale, float("-inf"))
+        mn = tl.maximum(m1, tl.max(sc, 1))
+        ms = tl.where(mn == float("-inf"), 0.0, mn)
+        p = tl.exp2(sc - ms[:, None])
+        al = tl.exp2(m1 - ms)
+        l1 = l1 * al + tl.sum(p, 1)
+        if PV16:  # FP8 queries: P.V in BF16
+            a1 = a1 * al[:, None] + tl.dot(p.to(tl.bfloat16), _kv(v1, HW, tl.bfloat16))
+        else:
+            a1 = a1 * al[:, None] + tl.dot(p.to(q1.dtype), _kv(v1, HW, q1.dtype))
+        m1 = mn
+    o0 = a0 * (vs / tl.where(l0 > 0, l0, 1.0))[:, None]
+    e0 = tl.where(l0 > 0, m0 + tl.log2(tl.where(l0 > 0, l0, 1.0)), float("-inf"))
+    i0 = (tq * HQ + hd) * NSPLIT + s
+    tl.store(o_ptr + i0[:, None] * D + d[None, :], o0, mask=mvalid[:, None])
+    tl.store(lse_ptr + i0, e0, mask=mvalid)
+    o1 = a1 * (vs / tl.where(l1 > 0, l1, 1.0))[:, None]
+    e1 = tl.where(l1 > 0, m1 + tl.log2(tl.where(l1 > 0, l1, 1.0)), float("-inf"))
+    i1 = (tq * HQ + G + hd) * NSPLIT + s
+    tl.store(o_ptr + i1[:, None] * D + d[None, :], o1, mask=mvalid[:, None])
+    tl.store(lse_ptr + i1, e1, mask=mvalid)
+
+
