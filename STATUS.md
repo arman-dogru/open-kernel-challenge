@@ -29,6 +29,36 @@ decode-v13-fused (base attn-fused): v13, for review.
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:52-5:05 AM ET: decode v17 (branch decode-v17 off origin/decode-v16 b8d806d)
+- v17 = v16 + MoE v26c's launch-chain fusion in the layer's CUDA expert path, brought in by building from source: the
+  moe_mma / route_prep CUDA sources of v16 and MoE v26a are identical, so tools/build_decode_v17.py applies v26c's
+  CUDA-side replacements verbatim (resulting _CU_SRC == MoE v26c's, checked) plus the layer's host-side edits (empty FP32
+  buffers, route_prep grid NR, c1 counters in state["moe_small"], silu_mul launch dropped). 6 -> 4 MoE launches,
+  bit-identical math. Graph replay: each (work item, row block) counter is reset to 0 by its last CTA inside the same
+  launch; c1 is zeroed in prepare, so every call / replay starts from zeros (one MoE per kernel_fn, launches serialized on
+  the stream).
+- 17-32 tokens (decode 32) now use the CUDA experts (standalone 32-token config NB 1, (8, 4, 2)): projected from v15b
+  (CUDA@32 ~6-11 us behind Marlin) minus v26a (~-10 us at bs32) and v26c (~-10 us): ~-10 to -14 us vs Marlin.
+- Byte-exact at HEAD 617b28c; NVRTC: GATED 64 regs / 8 B spill (8 warps), 72 regs (4 warps).
+- Check 5dbee2e16e3741f9 (sha 67dbbe14..., commit 617b28c): 13/13, 1.333x (95% 1.313-1.353) vs v16 1.289x (1.270-1.309),
+  v14 1.278x, board v13 1.251x. Lower bound > 1.31 -> PR #12 against decode-v16. Not submitted.
+  | case | SGLang | v16 us / x | v17 us / x |
+  |---|---|---|---|
+  | decode 1 sliding | 172.9 | 117.0 / 1.462 | 113.9 / 1.518 |
+  | decode 1 full | 180.9 | 125.0 / 1.471 | 121.4 / 1.490 |
+  | decode 16 sliding | 256.5 | 190.7 / 1.396 | 180.7 / 1.419 |
+  | decode 16 full | 434.0 | 317.6 / 1.362 | 312.8 / 1.387 |
+  | decode 32 sliding | 257.3 | 236.5 / 1.096 | 218.2 / 1.179 |
+  | decode 32 full | 619.8 | 486.4 / 1.262 | 468.4 / 1.323 |
+  | verify 1 sliding | 262.5 | 176.0 / 1.483 | 172.9 / 1.518 |
+  | verify 1 full | 280.9 | 187.8 / 1.476 | 185.5 / 1.515 |
+  | verify 16 sliding | 513.2 | 434.9 / 1.155 | 422.4 / 1.215 |
+  | verify 16 full | 718.2 | 619.5 / 1.110 | 619.0 / 1.160 |
+  | verify 32 sliding | 722.4 | 610.6 / 1.180 | 599.9 / 1.204 |
+  | verify 32 full | 1,083.3 | 960.1 / 1.097 | 971.0 / 1.116 |
+  decode 32 gained 18 us per layer as projected (CUDA experts at 32 tokens); verify 16/32 (Marlin, unchanged code) moved
+  with SGLang's own timing (noise).
+
 ## Oct 29 ~4:41-4:50 AM ET: decode v16 (branch decode-v16 off origin/moe-v26 325eb72)
 - decode-v14's files brought in by file checkout (git checkout origin/decode-v14 -- muse_decode_layer/runs/v14_verify_split.py
   tools/build_decode_v14.py), committed as-is; no merge of the decode-v14 branch.
