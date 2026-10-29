@@ -13,7 +13,7 @@ import os, sys, pickle, inspect, subprocess, importlib.util, re, tempfile
 
 TORCH2TT = {"float32": "fp32", "bfloat16": "bf16", "float16": "fp16", "float8_e4m3fn": "fp8e4nv", "float8_e5m2": "fp8e5",
             "int32": "i32", "int64": "i64", "int16": "i16", "int8": "i8", "uint8": "u8", "bool": "i1"}
-CASES = [dict(batch=1, ctx=3000, layer="sliding", q_len=1), dict(batch=3, ctx=2500, layer="sliding", q_len=1, spread="agentic"),
+CASES = [dict(batch=8, ctx=2600, layer="sliding", q_len=8, spread="agentic"), dict(batch=8, ctx=2600, layer="sliding", q_len=8, kv_scale=0.5), dict(batch=8, ctx=900, layer="full", q_len=8, page=64)] + [dict(batch=1, ctx=3000, layer="sliding", q_len=1), dict(batch=3, ctx=2500, layer="sliding", q_len=1, spread="agentic"),
          dict(batch=2, ctx=2600, layer="sliding", q_len=8), dict(batch=3, ctx=2600, layer="sliding", q_len=8, spread="agentic"),
          dict(batch=1, ctx=2600, layer="sliding", q_len=8),
          dict(batch=1, ctx=900, layer="full", q_len=8, dist="coherent"), dict(batch=2, ctx=900, layer="full", q_len=8, page=64),
