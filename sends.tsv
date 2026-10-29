@@ -55,3 +55,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 04:19:39	check	UNPARSED(rc=1)	muse_bf16_proj	muse_bf16_proj/runs/v27_wgmma.py	1194b4c2b927538d5b5070bc716b927a87b59633b5920aa2c27acb6cf300774a	eda33bf
 2026-10-29 04:20:08	check	9f218bc6dfb54dce	muse_bf16_proj	muse_bf16_proj/runs/v27_wgmma.py	5f4e121fe22e8f188b1e78afe38feb9c91a15c0883e72440f082ca02e3f23568	4e2b975
 2026-10-29 04:21:02	check	ca0ac29de0c347d8	muse_bf16_proj	muse_bf16_proj/runs/v27_wgmma.py	fcc4113c87b5492fed56a215cba1785a18849532da127bec5b0134994a491050	f311bfb
+2026-10-29 04:29:40	check	c20bde96ace6489d	muse_bf16_proj	muse_bf16_proj/runs/v28_wgmma_pipe.py	3613a8dee3e8c1236cd881239d54d02162768cba9c543cdd1c7b1661a1f1f6f4	cd5a674
