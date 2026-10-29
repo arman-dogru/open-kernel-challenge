@@ -65,3 +65,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-29 05:03:00	submit	7eaa9622f391455b	muse_moe_w4a16	muse_moe_w4a16/runs/v26c_fused_chain.py	85fe5e71ccae07e165f10e01c435f8ee97cf773780aa43624cd71b4fd452eeeb	377f1f0
 2026-10-29 14:48:38	check	b8a324016b7b4422	muse_moe_w4a16	muse_moe_w4a16/runs/v26e_nb2_evict.py	31a3254249dfa680495bb6f0edd7bf2b9a0c65f896e0ff6cbd3ec084b00d5179	252697a
 2026-10-29 15:03:44	check	e09cfcf550ab476e	muse_prefill_layer	muse_prefill_layer/runs/v1_router_fused.py	957484e6864648861e1aa209c89b78e47f19aef82e7538ac0d35594b1a9c49a2	8dc446d
+2026-10-29 15:09:26	check	e855efdd22b847af	muse_prefill_layer	muse_prefill_layer/runs/v2_dequant_grouped.py	f00bf46b23a6f01ed6fbdeb7f4599a14b78c50402d0feffafbd0117b6cbb2fca	80ec2f4

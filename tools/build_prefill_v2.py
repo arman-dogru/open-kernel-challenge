@@ -46,7 +46,8 @@ def _nvfp4_dequant_kernel(q_ptr, sf_ptr, gs_ptr, out_ptr, total_bytes, row_bytes
     m = i < total_bytes
     b = tl.load(q_ptr + i, mask=m, other=0).to(tl.int32)
     row = i // row_bytes
-    sf = tl.load(sf_ptr + row * (row_bytes // 8) + (i % row_bytes) // 8, mask=m, other=0).to(tl.float32)
+    sfb = tl.load(sf_ptr + row * (row_bytes // 8) + (i % row_bytes) // 8, mask=m, other=0)  # e4m3 scale bytes as uint8
+    sf = sfb.to(tl.float8e4nv, bitcast=True).to(tl.float32)
     gs = tl.load(gs_ptr + row // rows_per_expert, mask=m, other=0.0)
     scale = sf * gs
     lo = b & 0xF
@@ -69,7 +70,7 @@ def _dequant(q, sf, gs):
     out = torch.empty((e, n, 2 * kb), device=q.device, dtype=torch.bfloat16)
     total = q.numel()
     block = 2048
-    _nvfp4_dequant_kernel[(triton.cdiv(total, block),)](q, sf.view(torch.uint8).view(torch.float8_e4m3fn), gs, out,
+    _nvfp4_dequant_kernel[(triton.cdiv(total, block),)](q, sf.view(torch.uint8), gs, out,
                                                        total, kb, n, BLOCK=block, num_warps=8)
     return out
 
