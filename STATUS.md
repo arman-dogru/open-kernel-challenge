@@ -61,6 +61,11 @@ Built by tools/build_decode_v13.py (reproduces the file byte-exact) from v12_pre
 | 8ddcc64985b5474e | v13_fused_attn.py | **1.278x (1.259-1.298)** 13/13, score 17,694 us vs v12's 18,135 / 18,158 | v12 + v14's fused norm/RoPE/FP8-q/cache-write kernel (replaces FusedQKNorm + casts + store_cache), FP8 x FP8 Q.K in the split-KV kernels (P.V BF16), FA3 verify path fed the E4M3 q directly. RoPE table read clamped (r6 n4). SMALL_MAX / SMALL_CFG[32] removed; r4 n6 alignment assert, r4 n9 FP32 note |
 Per-shape judge speedups (v12 ff2c / v12 b350 -> v13): decode-1 sl 1.416/1.394 -> 1.428; decode-1 full 1.385/1.391 -> 1.422; decode-16 sl 1.291/1.301 -> 1.331; decode-16 full 1.239/1.241 -> 1.322; decode-32 sl 1.074/1.075 -> 1.09; decode-32 full 1.28/1.265 -> 1.266; verify-1 sl 1.361/1.361 -> 1.399; verify-1 full 1.334/1.344 -> 1.368; verify-16 sl 1.195/1.164 -> 1.22; verify-16 full 1.12/1.126 -> 1.162; verify-32 sl 1.167/1.184 -> 1.221; verify-32 full 1.111/1.127 -> 1.128.
 Next (decode_layer): decode-32 sliding (1.09x in v13's table) is still the weakest shape; see items 1-3 of the v10 notes below.
+SUBMITTED (by the parent, after review): job 093c2ebc301344e8, **1.251x (1.233-1.270)**, 13/13, vs the check's 1.278x
+(1.259-1.298). Same bytes (sha256 106b7d87…). Decode shapes reproduce within ±0.01; the gap is all in the verify
+16/32 blocks (FA3 path): verify-16 sliding 1.220 -> 1.147, full 1.162 -> 1.111; verify-32 sliding 1.221 -> 1.130,
+full 1.128 -> 1.089. The CIs overlap (1.259-1.270), so the check sat at the high end of its range on those shapes.
+Quote ~1.25x for v13. The verify-path gain over v12 is smaller than the check suggested.
 
 ## Oct 29 ~12:20 AM ET resume (successor worker)
 - Branch moe-packed-dequant pushed (was local only). bf16 v8/v9/v10 checks: 1.061x / 0.727x / 0.769x (all
