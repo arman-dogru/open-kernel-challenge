@@ -23,12 +23,87 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
+- Checks used: bf16 19 of 20 (v27 x2 this session; 2 pre-check rejections created no job); attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
 - Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
 
+## Oct 29 ~4:30-5:00 AM ET: bf16 v28 checked (Arman: spend the expiring check), v29 built offline (not sent)
+- v28 check c20bde96ace6489d (sha 3613a8de..., commit 56d3628): 9/9 passed, 0.915x (95% 0.901-0.928); v27 was 0.927x, v17 1.133x.
+  m=8-32 per shape, median us / speedup (v17 | v27 | v28):
+  | case | m | v17 | v27 | v28 |
+  |---|---|---|---|---|
+  | verify 1 qkv_gate | 8 | 14.0/0.991 | 14.6/0.954 | 17.0/0.838 |
+  | verify 1 o | 8 | 6.4/1.079 | 9.3/0.702 | 9.0/0.734 |
+  | verify 1 pooler | 8 | 20.3/1.071 | 21.7/0.973 | 24.5/0.864 |
+  | verify 1 unpooler (n 1024) | 8 | 6.8/1.020 | 7.0/0.972 | 6.6/1.018 |
+  | decode 16 qkv_gate | 16 | 13.9/1.005 | 21.5/0.659 | 21.2/0.655 |
+  | decode 16 o | 16 | 6.3/1.084 | 11.9/0.555 | 11.7/0.572 |
+  | decode 16 pooler | 16 | 20.0/1.069 | 32.2/0.664 | 30.0/0.714 |
+  | decode 16 unpooler | 16 | 18.2/1.029 | 32.3/0.582 | 29.7/0.611 |
+  | decode 32 qkv_gate | 32 | 14.0/1.007 | 26.8/0.540 | 30.0/0.479 |
+  | decode 32 o | 32 | 6.3/1.070 | 16.5/0.427 | 16.5/0.414 |
+  | decode 32 pooler | 32 | 20.4/1.069 | 38.1/0.570 | 42.4/0.509 |
+  | decode 32 unpooler | 32 | 18.1/1.033 | 37.5/0.487 | 41.5/0.449 |
+  Other shapes run v17 routes and match v17. No m=8-32 shape beats v17.
+- Reading: the pipelining (all loads in flight) bought nothing visible, and where v28 doubled S (qkv/pooler 16->32 and 8->32)
+  it got slower, growing with m. Time vs m fits a split-K atomic cost of S*M*N FP32 atomics at roughly 110-180 G/s
+  (qkv m 8->32: +13 us for +1.8 M atomics; pooler +18 us for +3.1 M; o +7.5 us for +0.8 M). Extrapolated atomic-free base:
+  qkv ~12.7 (v17 14.0), pooler ~18.5 (20.3), o ~6.5 (6.4), unpooler ~17.9 (18.2) us.
+- v29 (tools/bf16_v29_wgmma.cu, tools/build_bf16_v29.py -> muse_bf16_proj/runs/v29_wgmma_partials.py, built from v28,
+  byte-exact at HEAD 3a95c60, sha 7ca4ece7...): atomics replaced by plain __stcg partial stores ws[s][tok][n] ([S][32][N]
+  FP32) + last-CTA (counter) reduction summing s = 0..S-1 in a fixed order (float4 over 4 rows, 4 accumulators),
+  deterministic, no ws zeroing; packed 8-byte BF16 stores. Verified offline: NVRTC sm_90a on the embedded source, 0 spills
+  (56 regs at NT 8/16/32); CPU emulation tools/tests/bf16_v29_partials_emu.py exact over M 5-32 and 3 geometries with
+  random CTA completion order, stale-garbage ws (never read), counter back to 0, and back-to-back calls reusing ws; CPU
+  tests 13/13 (the CPU path never runs the kernel).
+- v29 routing: per (layer, m) via WG_ROUTE, which is EMPTY. No measured v28 win, and no clear projected win: v29's
+  last-CTA reduction reads S*64*M partials serially (qkv S 32: 64 KB per tile at m 8, 256 KB at m 32), projected
+  ~1.5 us / ~4 us tail plus partial traffic. Projections: verify-1 pooler ~20.5 vs v17 20.3, qkv ~14.7 vs 14.0 (ties at best),
+  m 16/32 worse. With the route empty, prepare() skips the wgmma repack/workspaces/compile and v29 behaves as v17 (do not check it).
+- Next if bf16 is revisited: the reduction must stay distributed and cheap (cluster/DSMEM reduction of the S splits, or
+  fewer splits with deeper per-CTA pipelines, i.e. producer warp + full/empty barriers), and per-CTA overhead needs a
+  micro-profile. Measured wgmma base time only beats v17 by ~9% on qkv/pooler even with a free reduction. Fresh bf16 quota
+  after 8 PM ET; v29 with WG_ROUTE = {("pooler", 8), ("qkv_gate", 8)} is the cheapest single measurement of the new reduction.
+
+## Oct 29 ~4:25-4:55 AM ET: bf16 v28 pipelined wgmma (branch bf16-wgmma). Built and verified offline; NOT sent (check saved).
+v28_wgmma_pipe.py, built by tools/build_bf16_v28.py from v17 + tools/bf16_v28_wgmma.cu (byte-exact at HEAD).
+- Change vs v27: each CTA's k range is NCH = 4 64-k chunks with one W stage per chunk (no slot reuse), all 4 TMA loads issued up
+  front, wgmma over the chunks with a single wait_group(0) at the end (v27 drained after every chunk). Split-K raised so NCH = 4 on
+  every layer (qkv/pooler S 32, unpooler S 16, o S 4): 512-2048 CTAs, 36-48 KB smem -> 4-6 CTAs/SM, ~128-190 KB in flight per SM.
+- Verified offline: NVRTC sm_90a + ptxas, no spills (32/34/42 regs at NT 8/16/32); CPU addressing emulation exact (M 5-32, NCH 4,
+  two geometries); CPU test path 13/13. No slot is reused, so there is no stage-overwrite hazard to get wrong.
+- Why I didn't use a single warpgroup with stage reuse + deferred waits: with one warpgroup, a W stage can't be refilled until the
+  wgmma group reading it has retired, and that group is the newest one, so the refill still needs wait_group(0) (v27's stall).
+  Decoupling them needs the producer warp + full/empty mbarriers (warp specialization), whose barrier protocol the addressing
+  emulation can't validate. v28 avoids reuse instead.
+- Why the check was saved: v27 lost more as m grew (m=8 0.70-0.97x, m=32 0.43-0.57x). The likely m-dependent cost is the split-K
+  reduction: S x M x N FP32 atomics (qkv m=32: 1.2 M at S=16 in v27, 2.4 M at S=32 in v28), which v28 makes larger. Chance of a
+  CI lower bound > 1.14 judged low, so per the rule the last bf16 check of the day is kept for after 8 PM ET.
+- Plan for the fresh quota (8 PM ET): (1) send v28 as is: its per-shape table separates the pipeline gain (m=8) from the
+  reduction cost (m=32); (2) then replace the atomics with deterministic plain partial stores ws[s][tok][n] + a last-CTA sum, or
+  cut S with all-resident stages (S 16 -> NCH 8, 64 KB smem), routing per shape only where it beats v17.
+
+## Oct 29 ~4:15-4:45 AM ET: bf16 v27 sm_90a wgmma swap-AB (branch bf16-wgmma, off origin/moe-v25). Correct, slower; no PR.
+Built by tools/build_bf16_v27.py from v17 + tools/bf16_v27_wgmma.cu, regenerated byte-exact at HEAD before each send.
+Offline checks on the box (no GPU): NVRTC -arch=sm_90a + ptxas compile (tools/tests/bf16_v27_nvrtc_cc.py: 30/34/42 regs at
+NT 8/16/32, no spills) and a CPU emulation of repack + x staging + descriptor addressing + D-fragment epilogue + split-K
+under the no-swizzle K-major layout model (tools/tests/bf16_v27_layout_emu.py: exact for M 5-32).
+| job | sha | result |
+|---|---|---|
+| (none) x2 | 1194b4c2… | judge pre-check rejected before any job: "touches harness I/O or secrets" (the cubin went through tempfile / os.fdopen / os.unlink). Fixed: cubin loaded from memory (cupy.cuda.function.Module.load). No quota used |
+| 9f218bc6dfb54dce | 5f4e121f… | failed in setup: cupy.cuda.function.Function has no max_dynamic_shared_size_bytes (NVRTC sm_90a compile + in-memory load did work on the judge). Fixed with cupy.cuda.driver.funcSetAttribute |
+| ca0ac29de0c347d8 | fcc4113c… | **passed 9/9, 0.927x (0.913-0.941)**: the wgmma kernel is numerically correct on H200. m=8 qkv/o/pooler/unpooler 0.954 / 0.702 / 0.973 / 0.972; m=16 0.659 / 0.555 / 0.664 / 0.582; m=32 0.540 / 0.427 / 0.570 / 0.487 (v17: ~1.0 / 1.08 / 1.07 / 1.03). Other shapes = v17 |
+- The layout/descriptor model (LBO = K-direction core-matrix stride, SBO = M/N-direction, swizzle 0) and the D-fragment map
+  are confirmed by the judge's correctness tests.
+- Why slow (it gets worse as NT grows): each CTA is one warpgroup that fully serializes per 64-k chunk (mbarrier wait -> 4 wgmma ->
+  wait_group 0 -> __syncthreads -> refill), stages the whole x slice before the first MMA, and its smem grows with NT
+  (qkv NT32 64 KB, pooler/unpooler 96 KB -> 2-3 CTAs/SM). ~1.4 TB/s at m=32.
+- Next (if bf16 is revisited): keep the kernel (it is correct) and pipeline it: wait_group(1) with the refill one chunk behind,
+  a producer warp for TMA + 2 consumer warpgroups, x via TMA too (or stage per chunk), 8-12 W stages of 8 KB, fewer splits
+  with a smaller x footprint. bf16 checks: 19 of 20 used today (v27 x2); 1 left until 8 PM ET.
 ## Oct 29 ~3:25-3:40 AM ET: attention_decode v15 (branch attn-v15, off moe-v25) -> PR #6
 | job | file | speedup (95% CI) | notes |
 |---|---|---|---|
