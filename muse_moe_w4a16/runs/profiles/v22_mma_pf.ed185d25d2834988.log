@@ -1,0 +1,101 @@
+BENCH bs=1 local_routes=2 experts=2 marlin=55.5us
+BENCH bs=1 W,S=(8, 8, 2) 54.6us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(16, 8, 4) 57.3us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(4, 8, 4) 58.5us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(8, 8, 4) 59.0us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(4, 8, 8) 61.1us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(8, 4, 4) 62.4us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(16, 4, 4) 64.3us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(4, 4, 4) 65.9us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(8, 4, 8) 70.0us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(8, 4, 2) 79.6us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(8, 2, 4) 94.8us err_vs_marlin=0.0053
+BENCH bs=1 W,S=(16, 2, 4) 116.5us err_vs_marlin=0.0053
+BENCH bs=1 w13=(8, 8, 2) w2=(4, 8, 4) 54.6us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 4, 4) 60.9us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 8, 4) 53.9us
+BENCH bs=1 w13=(8, 8, 2) w2=(16, 4, 4) 60.8us
+BENCH bs=1 w13=(8, 8, 2) w2=(16, 2, 4) 77.3us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 2, 4) 61.3us
+BENCH bs=1 w13=(8, 8, 2) w2=(4, 4, 4) 57.9us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 4, 2) 64.0us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 4, 8) 58.5us
+BENCH bs=1 w13=(8, 8, 2) w2=(4, 8, 8) 55.9us
+BENCH bs=1 w13=(8, 8, 2) w2=(16, 8, 4) 54.1us
+BENCH bs=1 w13=(8, 8, 2) w2=(8, 8, 2) 54.3us
+BENCH bs=8 local_routes=17 experts=6 marlin=96.4us
+BENCH bs=8 W,S=(8, 8, 2) 121.3us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(8, 4, 4) 122.0us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(8, 8, 4) 123.4us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(4, 8, 4) 124.7us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(8, 4, 2) 125.2us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(4, 4, 4) 129.6us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(16, 4, 4) 130.4us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(16, 8, 4) 135.8us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(8, 4, 8) 146.1us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(4, 8, 8) 150.6us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(8, 2, 4) 187.6us err_vs_marlin=0.0055
+BENCH bs=8 W,S=(16, 2, 4) 192.0us err_vs_marlin=0.0055
+BENCH bs=8 w13=(8, 8, 2) w2=(4, 8, 4) 122.5us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 4, 4) 121.1us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 8, 4) 120.9us
+BENCH bs=8 w13=(8, 8, 2) w2=(16, 4, 4) 125.4us
+BENCH bs=8 w13=(8, 8, 2) w2=(16, 2, 4) 123.9us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 2, 4) 124.8us
+BENCH bs=8 w13=(8, 8, 2) w2=(4, 4, 4) 124.8us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 4, 2) 124.2us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 4, 8) 122.6us
+BENCH bs=8 w13=(8, 8, 2) w2=(4, 8, 8) 123.8us
+BENCH bs=8 w13=(8, 8, 2) w2=(16, 8, 4) 125.1us
+BENCH bs=8 w13=(8, 8, 2) w2=(8, 8, 2) 122.0us
+BENCH bs=16 local_routes=28 experts=12 marlin=159.9us
+BENCH bs=16 W,S=(8, 4, 2) 191.6us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(8, 8, 2) 196.9us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(8, 4, 4) 201.4us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(4, 8, 4) 206.9us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(8, 8, 4) 207.9us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(4, 4, 4) 212.4us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(16, 4, 4) 213.8us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(16, 8, 4) 234.3us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(4, 8, 8) 239.2us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(8, 4, 8) 251.6us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(8, 2, 4) 292.2us err_vs_marlin=0.0055
+BENCH bs=16 W,S=(16, 2, 4) 296.9us err_vs_marlin=0.0055
+BENCH bs=16 w13=(8, 4, 2) w2=(4, 8, 4) 198.4us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 4, 4) 193.2us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 8, 4) 196.4us
+BENCH bs=16 w13=(8, 4, 2) w2=(16, 4, 4) 195.7us
+BENCH bs=16 w13=(8, 4, 2) w2=(16, 2, 4) 192.3us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 2, 4) 191.9us
+BENCH bs=16 w13=(8, 4, 2) w2=(4, 4, 4) 195.3us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 4, 2) 191.2us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 4, 8) 197.4us
+BENCH bs=16 w13=(8, 4, 2) w2=(4, 8, 8) 203.5us
+BENCH bs=16 w13=(8, 4, 2) w2=(16, 8, 4) 203.2us
+BENCH bs=16 w13=(8, 4, 2) w2=(8, 8, 2) 194.1us
+BENCH bs=32 local_routes=46 experts=17 marlin=221.8us
+BENCH bs=32 W,S=(8, 4, 2) 275.3us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(8, 8, 2) 281.7us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(8, 4, 4) 287.9us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(4, 4, 4) 299.7us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(8, 8, 4) 300.7us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(4, 8, 4) 303.0us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(16, 4, 4) 312.1us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(4, 8, 8) 337.3us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(16, 8, 4) 342.4us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(8, 4, 8) 352.6us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(8, 2, 4) 455.5us err_vs_marlin=0.0055
+BENCH bs=32 W,S=(16, 2, 4) 472.8us err_vs_marlin=0.0055
+BENCH bs=32 w13=(8, 4, 2) w2=(4, 8, 4) 287.6us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 4, 4) 277.0us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 8, 4) 285.8us
+BENCH bs=32 w13=(8, 4, 2) w2=(16, 4, 4) 283.6us
+BENCH bs=32 w13=(8, 4, 2) w2=(16, 2, 4) 285.9us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 2, 4) 275.5us
+BENCH bs=32 w13=(8, 4, 2) w2=(4, 4, 4) 280.3us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 4, 2) 274.9us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 4, 8) 283.7us
+BENCH bs=32 w13=(8, 4, 2) w2=(4, 8, 8) 294.2us
+BENCH bs=32 w13=(8, 4, 2) w2=(16, 8, 4) 294.0us
+BENCH bs=32 w13=(8, 4, 2) w2=(8, 8, 2) 278.6us
+BENCH done in 14s
