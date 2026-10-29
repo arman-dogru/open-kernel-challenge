@@ -1,4 +1,4 @@
-# STATUS — updated Oct 29 2026, ~2:40 AM ET
+# STATUS — updated Oct 29 2026, ~2:50 AM ET
 
 **Rules acceptance: 2026-10-28 ~6 PM ET, rules re-accepted by Arman personally via `okc login` (on his own
 Mac); the box's earlier agent-accepted session was logged out and revoked. Submits from here use his token.**
@@ -23,11 +23,24 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv and `okc problems` (~2:27 AM ET)
-- Checks used: bf16 12 of 20 (v19 99cd85; + accidental v7 re-send deduped); attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20
+- Checks used: bf16 17 of 20 (v19, v22-v26 this morning; v7 re-send 9e6108 deduped); attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 1 (v12, b35042c212354b1f, 1.246×),
   attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0. 9 of 10 left on each of those three, 10 on bf16.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~2:38-2:50 AM ET: bf16 session 2 (branch bf16-tma-wgmma). Nothing clears the 1.13 bar; no PR.
+| check | file | speedup | note |
+|---|---|---|---|
+| 41a723aa68fe4d79 | v22_router_regime.py | 1.103x (1.087-1.120) | router m<=8 (32,128,4): m=1 0.946x (v7 1.31x), m=8 2.30x (v7 2.5x). Not carried; v21 (same m<=8 config) not sent |
+| 42f8408fae1a4a8b | v23_tma_bulk.py | 0.970x | SM90 cp.async.bulk (TMA 1-D) + mbarrier-fed mma.sync GEMV, 1 warp/CTA, 8-16-way split-K. **m=1: qkv_gate 1.072x (first qkv win), sliced unpooler 1.084x**; m>=8 0.46-0.91x |
+| 77cfc7faa257400c | v24_tma_route.py | 0.970x | m=1 as v23; m>=2 with 4 warps/CTA + in-CTA reduction (4-16x fewer global atomics): no better (m16 qkv 18.8 us vs 19.4) -> not atomics |
+| 1d169b463f4e4dd0 | v25_tma_rt.py | 0.796x | m>=2 with RT=4 rowtiles per warp (x reuse 4x): worse (m32 qkv 64 us) -> the limit is serial mma.sync issue per warp, not x reads |
+| cd0ad18a7e114069 | v26_v17_tma_m1.py | **1.124x (1.107-1.141)** | v17 routes + TMA kernel at m=1 on qkv (1.027x this run) and sliced unpooler (1.071x). Same as v17 (1.133x) within noise; CI lower bound 1.107 < 1.13 -> no PR |
+Lessons: the TMA bulk-copy feed reaches ~3.8 TB/s on qkv_gate at m=1 (~10 us GPU vs cuBLAS nvjet+splitKreduce ~11 us), but the m=1
+gain is 0.4-0.9 us on one shape per load, ~0.3% overall. m>=8 needs many more MMA-issuing warps per SM or wgmma (sm_90a,
+NVRTC arch=sm_90a) with x as the B operand from smem; mma.sync from 1-4 warps/CTA is issue-latency bound (one accumulator chain
+per (rowtile, n8) pair). Next try: 8 warps/CTA with SS=2/ST=2 (4 KB per warp) and ~35 warps/SM, or a wgmma m64n8k16 swap-AB kernel.
 
 ## Oct 29 ~2:30-2:40 AM ET: bf16 session (branch bf16-tma-wgmma, off decode-v13-fused)
 Board 1.115x (v6). bf16 checks left at start: 9 of 20. Goal: CI lower bound > ~1.13.
