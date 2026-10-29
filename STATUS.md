@@ -22,12 +22,23 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
-## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv and `okc problems` (~2:27 AM ET)
-- Checks used: bf16 17 of 20 (v19, v22-v26 this morning; v7 re-send 9e6108 deduped); attention 3 of 20; MoE 13 of 20; decode_layer 6 of 20
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
+- Checks used: bf16 17 of 20; attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
-- Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 1 (v12, b35042c212354b1f, 1.246×),
-  attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0. 9 of 10 left on each of those three, 10 on bf16.
+- Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
+  093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~3:10-3:27 AM ET: MoE session (branch moe-v25, off bf16-tma-wgmma). Nothing clears the 1.40 bar; no PR.
+| job | file | speedup (95% CI) | notes |
+|---|---|---|---|
+| 0d61ab04212b4916 | v25_scale_pair.py | 1.285x (1.266-1.308) | one cvt.e4m3x2 for both rows' scales + integer f16->bf16 re-bias (exact, exhaustively checked) + byte-perm splat. **moe_mma doubled at bs1 (65.5 vs 31.6 us)** and lost 10-20% at bs 8-32: fewer source ops but the SASS is worse (likely __vcmpne2's emulation and/or register pressure/spills; no local NVRTC to read SASS). Dropped |
+| 843d33d84aa34786 | v25b_fold_fill.py | 1.391x (1.370-1.412) | v24 kernels + zero-fill launch folded away (route_prep one block per route zeroes its local GEMM-1 row; silu_mul zeroes the local GEMM-2 row) + r4 m1 (.compile() in prepare), m2 (bench stripped), n4 (BLOCK_M by range), n5, n6 (16 B alignment assert), n9 (FP32 noted). bs1 1.809 / bs16 1.391 / bs32 1.117 / v1 1.423 / v16 1.371 / v32 1.322. Within noise of v24 (1.380, 1.359-1.401); bs1 GPU total 39.1 vs 39.4 us (fill kernel gone, route_prep/silu_mul +0.7 us) |
+- v25b is the clean candidate carrying all r4 items (minor 3, nearby/skewed shapes, still unmeasured). Same speed as v24
+  within noise, so not worth a submit on speed alone; could replace v24 if a reviewer wants the r4 fixes on the board.
+- Next ideas (untested): bs32 is issue-bound at ~1.8 TB/s (185 us vs 70.8 us floor). Options: read SASS for the k-step
+  (needs NVRTC locally or a check-run dump via cp.RawModule ptx), NB=2 above bs 24 (fewer passes over shared experts),
+  fusing silu_mul into GEMM-2 staging again only if it saves the launch at bs1.
 
 ## Oct 29 ~2:38-2:50 AM ET: bf16 session 2 (branch bf16-tma-wgmma). Nothing clears the 1.13 bar; no PR.
 | check | file | speedup | note |
