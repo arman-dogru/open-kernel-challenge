@@ -22,6 +22,72 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Oct 29 ~3:40-3:45 PM ET: prefill v2b and decode v19 submitted (review round 13 approvals of #16 / #17)
+- prefill_layer v2b_dequant_grouped.py (sha d0b2cc11..., sent at 99e0c27): submit 7b69b2fcfffb40dd, **1.088x (1.072-1.105)**,
+  5/5 tests. First prefill board entry. Per TASK.md, prefill has its own board and does not count toward the overall rank.
+  First-turn shapes 1.186-1.310x; turn 1 / turn 4 shapes ~1.003-1.004x (Marlin path, unchanged).
+- decode_layer v19_nb2_256_evict.py (sha d70c6c3e..., sent at 1e4fd5c): submit 7702cb83b35b4737, **1.364x (1.344-1.385)**,
+  13/13 tests. The CI lower bound clears v17's board upper bound (1.337), so this is a significant improvement over v17
+  (1.318x). verify 16 sliding / full 1.343 / 1.237x, verify 32 1.282 / 1.182x.
+- Public board after both (~3:44 PM ET): overall rank 699 of 1606 (solved 4; prefill not counted).
+- Ledger note (review round 13, #15): 17 older rows on main fail the ledger check. 16 of them have commit time equal to
+  send time, i.e. they were back-filled after the fact. The v7_audit_nits row has commit 'dedupe' and a sha256 that does
+  not match the file. They are left as recorded and not rewritten; treat them as unverified history.
+
+## Oct 29 ~2:36-3:00 PM ET: leaderboard gaps; decode v18 / v18b; MoE v26e (Arman: climb incrementally, keep afloat)
+Leaderboard (public board, ~2:40 PM ET; overall rank 754 / 1589):
+
+| problem | ours | rank | top-1 | top-50 | ~rank 500 | rank at +0.05x |
+|---|---|---|---|---|---|---|
+| bf16_proj | 1.115 | 1224 / 1378 | 1.637 | 1.560 | 1.286 | 1025 |
+| moe_w4a16 | 1.500 | 694 / 1105 | 2.689 | 2.386 | 1.793 | 677 |
+| attention_decode | 1.385 | 793 / 1058 | 3.054 | 2.639 | 1.733 | 746 |
+| decode_layer | 1.318 | 694 / 972 | 2.418 | 2.184 | 1.541 | 645 |
+
+The overall formula is unpublished. The best fit is the sum of per-problem step times (SGLang 4831 / 13448 / 3766 / 22620 us
+for bf16 / MoE / attention / decode). Overall places per +0.05x on that model: decode ~23, MoE ~9, bf16 ~5,
+attention ~3. So decode_layer (half the summed time) and MoE pay most per unit of effort.
+
+decode v18 (branch decode-v18 off origin/decode-v17 032fef4, tools/build_decode_v18.py, 9bd11b9): CUDA experts for
+128 / 256-token verify (NB 2 / NB 4), plus the review round 10 minors (FASTSCALE per state, eager compile, no BENCH).
+Check 9566de62f7e94ed1 scored 1.333x (1.313-1.353): verify16 422 / 619 -> 405 / 587 us (win), but verify32 lost to
+Marlin with NB 4 (115 registers). v18b (8e01dcf) caps the CUDA path at 192 tokens. Check ae89a962123748e6 scored
+1.328x (1.308-1.348), in the noise of v17 (board 1.318, check 1.333): verify16 402 / 594 us. No PR.
+
+MoE v26e (branch moe-v26e off origin/moe-v26c a89056a, tools/build_moe_v26e.py -> runs/v26e_nb2_evict.py, 252697a):
+v26c + the same NB 2 CUDA experts at 128 tokens (SMALL_MAX 192), + L2 evict-first / L1 no-allocate weight and scale
+loads (createpolicy + ld.global.nc...L2::cache_hint; kernel-wide policy register, NVRTC registers and spills equal
+to v26c), + review round 10 minors. Check b8a324016b7b4422 scored **1.546x (1.523-1.569)**. Board v26c: 1.500x
+(1.478-1.523).
+
+| case | v26c check f479a34c | v26c submit 7eaa9622 | v26e b8a32401 |
+|---|---|---|---|
+| decode 1 | 40.0 | 38.5 | 39.2 |
+| decode 16 | 120.4 | 120.0 | 117.7 |
+| decode 32 | 165.2 | 158.6 | 161.8 |
+| verify 1 (8 tok) | 93.3 | 87.9 | 86.4 |
+| verify 16 (128 tok) | 338.6 | 349.9 | **298.1** |
+| verify 32 (256 tok) | 468.7 | 468.3 | 470.8 |
+
+(median us). The whole gain is at verify16 (NB 2, -12 to -15%). Evict-first is neutral on the bandwidth-bound
+small shapes. Not submitted, no PR opened (for Arman / Larper).
+
+Follow-ups (~3:05 PM ET, status-r11):
+- Larper approved PR #14 (moe-v26e). Arman submitted v26e at 2:59 PM ET as job 94cff1d839e947df: 1.539x (1.516-1.562),
+  5/5 tests. The CI lower bound does not clear the old board entry's upper bound (1.523), so this is not recorded as
+  a significant improvement. It is the new board entry (point estimate +0.039x over v26c 1.500x).
+- NB 2 GEMM-1 (gated, W8, MINB 3) under NVRTC -Xptxas -v: 80 registers, a 24-byte spill with FASTSCALE (16 bytes
+  without), 33 KB shared. The NB 2 GEMM-2 kernel: 62 registers, no spill. Same in decode v18 / v18b and MoE v26e.
+- sends.tsv rows and profiles for checks 9566de62f7e94ed1 / ae89a962123748e6 (decode v18 / v18b), b8a324016b7b4422
+  (v26e), the v26e submit, and v26c f479a34c48984e24 / 7eaa9622f391455b are recorded here (review round 11 m1).
+- moe-v26d is a stale offline experiment: cp.async activation staging, projected ~0%, never checked. It is kept for
+  reference only; nothing builds on it.
+
+## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:53 PM ET (supersedes the ~2:45 PM line)
+- Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 2 (after v26e b8a324016b7b4422), decode_layer 7
+  (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
+- Scored runs left: bf16 10, attention 8, MoE 7 (after the v26e submit), decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26e 94cff1d839e947df 1.539x, MoE v26c
+  7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
 - Checks used: bf16 19 of 20 (v27 x2 this session; 2 pre-check rejections created no job); attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
 - Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
@@ -29,6 +95,57 @@ decode-v13-fused (base attn-fused): v13, for review.
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+(Ported from branches moe-v26c / moe-v26d by status-r11, review round 11.)
+
+## Oct 29 ~4:57-5:05 AM ET: MoE v26d, activation staging (branch moe-v26d off origin/moe-v26c 377f1f0). Offline only, no check.
+- Quantified before building (bs32, GEMM 1 CTA = 8 warps, KS 1024, 16 k-tiles per warp; GEMM 2 alike):
+  - L2 bytes: ~2560 CTAs x 16 KB per GEMM, ~82 MB per call over ~160 us = ~0.5 TB/s, ~5% of L2 bandwidth: not a cost.
+  - Issue: staging is ~4 LDG + 4 STS + index math (~40 instr) per thread vs ~3700 in the k-loop (16 tiles x ~115 x
+    gate+up): ~1%.
+  - Latency: the lst -> x loads (two dependent L2 hits, ~1 us) already overlap the first PF weight loads (HBM, same order),
+    and 4 CTAs/SM hide the rest. Register-resident rows would need ~128 B-fragment regs per lane; sharing across more
+    N-tiles per CTA (wider W) does not cut per-thread issue.
+  - Expected: ~0-2% of moe_mma, ~0.5-1.5% overall at bs8-32 (less at bs1); clearing 1.52 needs ~+3%. Not promising.
+- Built the cheapest exact variant anyway: cp.async.cg 16-byte staging straight to smem (src-size 0 zero-fill), one
+  commit group waited before the barrier; same bytes, bit-identical to v26c. tools/build_moe_v26d.py ->
+  muse_moe_w4a16/runs/v26d_async_stage.py, byte-exact at HEAD. NVRTC: -2 PTX instructions per kernel (3260 -> 3258,
+  1732 -> 1730), same registers (64/54 at 8 warps, 72/52 at 4) and spills. Confirms ~0 gain; check not spent.
+- Where MoE small-batch time really is now: moe_mma's k-loop issue (dequant ~9 ALU + 4 HMUL2 + 2 splat per 32-bit code
+  word, near the bit-layout minimum per the v26b analysis), post-norm 3-4 us, route_prep 2-3 us. Bigger next levers would be
+  structural: fp16 instead of bf16 MMA operands (HMUL2 f16 + e2m1 -> f16 bit layout with more slack; precision delta
+  needs analysis), or a combined GEMM1+GEMM2 persistent kernel to remove one more launch + tail (~2-3 us).
+
+## Oct 29 ~4:46-5:00 AM ET: MoE v26c (branch moe-v26c off origin/moe-v26 325eb72; built from v26a)
+- Gap census from v26a's profiles (bs 1/8/16/32): moe_mma 36.0/69.8/93.2/157.5 us; outside it silu_mul 2.7-3.8, post-norm
+  3.4-3.7, zero-fill 0.9-3.6, route_prep 1.4-1.6 us, plus 5 inter-kernel gaps: ~9-13 us per call (6-8% at bs16-32,
+  ~20% at bs1). Activation staging sits inside moe_mma (not separable without a profiler) and needs a loop restructure, so
+  the launch chain went first.
+- v26c: 6 -> 4 launches. FP32 sum buffers torch.empty; route_prep runs one block per route and zeroes local routes' GEMM-1
+  (2I) and GEMM-2 (H) rows (block 0 builds the lists). silu_mul removed: GEMM 1 split-K CTAs count arrivals per (work item,
+  row block) in self-resetting int32 counters (state["c1"], zeroed in prepare, reset by the last CTA), and the last CTA
+  writes silu(gate) * up as BF16 for its 16 * WARPS rows with silu_mul's exact expression. Same FP32 sums and SiLU math:
+  bit-identical to v26a up to the FP32 atomic order both already have. __launch_bounds__ minBlocks keeps v26a's occupancy
+  for GATED (8 warps: 4 CTAs/SM at 64 regs, 8 B spill vs v26a's 28 B; 4 warps: 7 CTAs/SM, 72 regs).
+  tools/build_moe_v26c.py -> muse_moe_w4a16/runs/v26c_fused_chain.py, byte-exact at HEAD 8bd9599.
+- Check f479a34c48984e24 (sha 85fe5e71..., commit 8bd9599): 5/5, 1.497x (95% 1.474-1.519) vs v26a 1.457x (1.435-1.479).
+  | load | SGLang | v26c us / x | v26a x |
+  |---|---|---|---|
+  | decode 1 | 79.3 | 40.0 / 1.982 | 1.914 |
+  | decode 16 | 188.0 | 120.4 / 1.561 | 1.502 |
+  | decode 32 | 206.4 | 165.2 / 1.249 | 1.219 |
+  | verify 1 (8 tok) | 151.1 | 93.3 / 1.619 | 1.542 |
+  | verify 16 (128, Marlin) | 464.2 | 338.6 / 1.371 | 1.361 |
+  | verify 32 (256, Marlin) | 614.5 | 468.7 / 1.311 | 1.302 |
+  Lower bound 1.474 is not > 1.48 (bar: v26a's CI upper 1.479), but Arman opened PR #11 (base moe-v26) and submitted
+  it: job 7eaa9622f391455b, 1.500x (CI 1.478-1.523), record a89056a on moe-v26c. Second MoE check kept.
+- Left outside moe_mma: post-norm sum 3.0-4.1 us, route_prep 2.0-2.8 us. Folding the norm into GEMM 2 needs every local
+  route of a token complete (rows finish in different items): a per-token finisher serializes up to 8 tokens' norms in the
+  last CTA (tail could exceed the 3-4 us kernel); the per-route variant (route-level norm + FP32 atomics into out, per-token
+  counter converts to BF16) nets ~1-2 us and changes the sum order. PDL can't prefetch weights before griddepcontrol.wait
+  (the weight address depends on route_prep's work list), so it would only hide ~1 us of launch latency per boundary. Neither
+  is clearly enough for a check; next real lever is activation staging inside moe_mma (16 KB per CTA from L2 before the loop).
+- (decode v16's STATUS section lives on branch decode-v16 / PR #10.)
 
 ## Oct 29 ~4:52-5:05 AM ET: decode v17 (branch decode-v17 off origin/decode-v16 b8d806d)
 - v17 = v16 + MoE v26c's launch-chain fusion in the layer's CUDA expert path, brought in by building from source: the
@@ -42,7 +159,8 @@ decode-v13-fused (base attn-fused): v13, for review.
   (CUDA@32 ~6-11 us behind Marlin) minus v26a (~-10 us at bs32) and v26c (~-10 us): ~-10 to -14 us vs Marlin.
 - Byte-exact at HEAD 617b28c; NVRTC: GATED 64 regs / 8 B spill (8 warps), 72 regs (4 warps).
 - Check 5dbee2e16e3741f9 (sha 67dbbe14..., commit 617b28c): 13/13, 1.333x (95% 1.313-1.353) vs v16 1.289x (1.270-1.309),
-  v14 1.278x, board v13 1.251x. Lower bound > 1.31 -> PR #12 against decode-v16. Not submitted.
+  v14 1.278x, board v13 1.251x. Lower bound > 1.31 -> PR #12 against decode-v16. Submitted later by Arman: job
+  6a55705a372f40ac, 1.318x (CI 1.298-1.337), record 032fef4.
   | case | SGLang | v16 us / x | v17 us / x |
   |---|---|---|---|
   | decode 1 sliding | 172.9 | 117.0 / 1.462 | 113.9 / 1.518 |
@@ -148,7 +266,7 @@ decode-v13-fused (base attn-fused): v13, for review.
   ~10.9 us per expert; next levers are the E2M1 code unpack (rotl + mask per a-register) and launch gaps (5 launches).
 
 ## Oct 29 ~4:30-5:00 AM ET: bf16 v28 checked (Arman: spend the expiring check), v29 built offline (not sent)
-- v28 check c20bde96ace6489d (sha 3613a8de..., commit 56d3628): 9/9 passed, 0.915x (95% 0.901-0.928); v27 was 0.927x, v17 1.133x.
+- v28 check c20bde96ace6489d (sha 3613a8de...; file committed in 56d3628, sent at HEAD cd5a674 per sends.tsv): 9/9 passed, 0.915x (95% 0.901-0.928); v27 was 0.927x, v17 1.133x.
   m=8-32 per shape, median us / speedup (v17 | v27 | v28):
   | case | m | v17 | v27 | v28 |
   |---|---|---|---|---|
@@ -185,7 +303,8 @@ decode-v13-fused (base attn-fused): v13, for review.
   micro-profile. Measured wgmma base time only beats v17 by ~9% on qkv/pooler even with a free reduction. Fresh bf16 quota
   after 8 PM ET; v29 with WG_ROUTE = {("pooler", 8), ("qkv_gate", 8)} is the cheapest single measurement of the new reduction.
 
-## Oct 29 ~4:25-4:55 AM ET: bf16 v28 pipelined wgmma (branch bf16-wgmma). Built and verified offline; NOT sent (check saved).
+## Oct 29 ~4:25-4:55 AM ET: bf16 v28 pipelined wgmma (branch bf16-wgmma). SUPERSEDED: Arman then had the check spent
+(c20bde96ace6489d, 0.915x; see the ~4:30-5:00 AM section above). Kept for the design notes; its "check saved" plan is moot.
 v28_wgmma_pipe.py, built by tools/build_bf16_v28.py from v17 + tools/bf16_v28_wgmma.cu (byte-exact at HEAD).
 - Change vs v27: each CTA's k range is NCH = 4 64-k chunks with one W stage per chunk (no slot reuse), all 4 TMA loads issued up
   front, wgmma over the chunks with a single wait_group(0) at the end (v27 drained after every chunk). Split-K raised so NCH = 4 on

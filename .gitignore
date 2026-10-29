@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .env
+
+# okc_send.py failure log (local; review round 11 n1)
+sends_failed.log
