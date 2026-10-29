@@ -559,3 +559,17 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-10-29 02:16:03 | efe18d6e4b8c4fe3 | muse_attention_decode | submit | v14b_docfix.py | f9b4b6409ce588ea | 77808d1 | 1.317x (1.297-1.336), passed=True |
 | 2026-10-29 02:23:06 | 8ddcc64985b5474e | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 926c76a | 1.278x (1.259-1.298), passed=True |
 | 2026-10-29 02:25:43 | 9a588099434d407f | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 7675026 | pending (profile not saved) |
+
+## Oct 29 ~3:30-3:45 PM ET: attention v16, dedicated full-verify kernel (branch attn-verify-v1 off main 39dd050). No PR.
+- tools/build_attn_v16.py (+ tools/attn_verify_kernel.py.txt) -> muse_attention_decode/runs/v16_verify_fused.py.
+  _attn_verify: one program per (split, request) holding both KV heads, the 8 tokens x 8 heads of each as one 64-row
+  tile, each key's 128-byte row read once, V issued with K, and an in-kernel last-arrival merge + RMSNorm x
+  sigmoid(gate) (self-resetting counters; one launch). The CPU interpreter's output errors equal v15b's head path to
+  4 digits (b2/b3, agentic, page 64, repeated calls).
+- Check 9f59e5963dd740bd: 1.253x (1.234-1.272), 16/16 tests. Full verify b16 / b32: 291.6 / 531.5 us = 0.708 /
+  0.738x (FA3 206 / 392 us). Other cells as v15b.
+- Diagnosis: compute-bound, not memory-bound. Verify-16 full is ~42 GFLOP of Q.K + P.V (64 rows x 64 dims per key per
+  KV head, with no padding). _attn_verify runs it at ~145 TFLOP/s and FA3 at ~205; the 63 us floor is memory only.
+  The layout and merge changes cannot help. FP8 P.V (as FA3 does) would halve the P.V cost, ~220 us projected, still
+  behind FA3. Beating FA3 needs a hand-written wgmma kernel (CUDA, FP8 both GEMMs, warp-specialized softmax), not
+  Triton tl.dot. Not ported to decode; v15b / FA3 routing stays.
