@@ -15,11 +15,16 @@ data = open(path, "rb").read()
 sha = hashlib.sha256(data).hexdigest()
 commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
 out = subprocess.run(["okc", kind, path, "--no-wait", "--json"], capture_output=True, text=True)
-if out.returncode:
-    sys.exit(out.stdout + out.stderr)
-job = json.loads(out.stdout)
-assert hashlib.sha256(open(path, "rb").read()).digest() == hashlib.sha256(data).digest(), "file changed during send"
 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# Record every send attempt, even when okc fails or its output doesn't parse (audit r3 nit).
+try:
+    job = json.loads(out.stdout)
+    job_id, problem = job["job_id"], job["problem"]
+except (ValueError, KeyError, TypeError):
+    job_id, problem = "UNPARSED(rc=%d)" % out.returncode, path.split("/")[0]
+same = hashlib.sha256(open(path, "rb").read()).hexdigest() == sha
 with open("sends.tsv", "a") as f:
-    f.write("\t".join([now, kind, job["job_id"], job["problem"], path, sha, commit]) + "\n")
-print(job["job_id"], sha[:16])
+    f.write("\t".join([now, kind, job_id, problem, path, sha if same else sha + "(FILE CHANGED DURING SEND)", commit]) + "\n")
+if out.returncode or job_id.startswith("UNPARSED") or not same:
+    sys.exit(out.stdout + out.stderr + ("" if same else "\nfile changed during send"))
+print(job_id, sha[:16])
