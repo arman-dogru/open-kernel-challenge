@@ -23,11 +23,22 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
-- Checks used: bf16 17 of 20; attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
+- Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
 - Submits used: MoE 1 (v24, d625bb2af63b43c1, 1.380×), decode_layer 2 (v12 b35042c212354b1f 1.246×; v13
   093c2ebc301344e8 1.251×), attention 1 (v14b, efe18d6e4b8c4fe3, 1.317×), bf16 0.
 - Note: the judge dedups identical code, so a byte-identical re-check can't be used to replicate a timing.
+
+## Oct 29 ~3:25-3:40 AM ET: attention_decode v15 (branch attn-v15, off moe-v25) -> PR #6
+| job | file | speedup (95% CI) | notes |
+|---|---|---|---|
+| 28ad328cf5284948 | v15a_verify_split.py | 1.232x (1.214-1.251) | exploration: every verify block on the split-KV head kernel. Sliding verify 1.553 / 1.533 / 1.283 (b1/16/32; FA3 was 1.334 / 1.259 / 1.160), full verify b1 1.633 (FA3 1.201), full verify b16/b32 0.691 / 0.666 (FA3 1.033 / 1.014) |
+| ab5f387ae32242ba | v15b_verify_route.py | **1.376x (1.355-1.396)** | routes picked from v15a's table by regime: head kernel for sliding verify (any batch) and full verify b1; FA3 for full verify b>=2. Decode unchanged (1.63-1.86). CI clear of v14b's board 1.317 (1.297-1.336) |
+- Both carry r6 m2 (dead _qk_norm/_norm_rope_store/_norm_rope_store_torch/_NORMS removed), n3 (_nsplit docstring, combine's
+  dead NSPLIT_P2 masking removed + power-of-two assert), n4 (RoPE table index clamped to NPOS - 1). No precision change
+  (q E4M3 as before, same kernels as the decode path). Not submitted.
+- Next: full verify b>=2 (FA3, ~1.02x) is the only weak cell; our 64-row head kernel is 0.67x there (compute-bound in Triton at
+  8 x 8 query rows per KV head). Fusing combine into split / norm+RoPE into the q load were not tried this session.
 
 ## Oct 29 ~3:10-3:27 AM ET: MoE session (branch moe-v25, off bf16-tma-wgmma). Nothing clears the 1.40 bar; no PR.
 | job | file | speedup (95% CI) | notes |
@@ -102,7 +113,9 @@ Board 1.117x (v9_regime). Attention checks this session: see the table (window t
 |---|---|---|---|
 | ed743d60bec04ad8 | v13_fused_store.py | **1.243x (1.224-1.261)** 16/16 | one Triton program per (token, head) does RMSNorm + interleaved RoPE + q out + k/v E4M3 cast + cache-row store. It replaces FusedQKNorm + 2 casts + store_cache (4-5 launches). Decode b1 sliding 16.1 -> 12.8 us (1.58x); verify shapes 1.01-1.25x now (FA3 path gains too) |
 | ad626ebbafd94cbb | v14_fp8q.py | **1.325x (1.305-1.345)** 16/16: decode 1.63-1.88x sliding, 1.36-1.66x full; verify 1.02-1.36x | v13 + q written in E4M3 by the fused kernel (FA3 skips its cast) + FP8xFP8 QK dot in the split kernels, PV in BF16 |
-Caveat: the Triton CPU interpreter's float8e4nv conversion is wrong (2.0 -> 1.0), so cache bytes can't be checked locally. GPU tests passed 16/16.
+Caveat (r6 n2): the Triton 3.9 CPU interpreter's fp32->E4M3 is wrong when rounding carries into the exponent (1.9375 -> 1.0,
+0.496 -> 0.25), rounds ties away and gives NaN above ~464; its fp32->bf16 truncates (2.0 itself converts fine). Check cache
+bytes locally with a cast-free kernel copy (review tests/t_fused_precast.py pattern), not through the interpreter's casts. GPU tests passed 16/16.
 FOR decode_layer: DONE in decode v13 (check 8ddcc64985b5474e, 1.278x): the fused kernel + FP8 q replaced qk_norm + casts + store_cache.
 Next (attention): the r2 nits (_nsplit docstring 225 keys, dead NSPLIT_P2 masking) are still open in the attention file (sent files are not edited), so fix them in v15. Fold the split combine into the split kernel (last-arriving program via an atomic counter) to save ~1-2 us per decode shape;
 fold the fused norm/RoPE into the split kernel's q load for decode (q_len 1).
