@@ -23,6 +23,13 @@ path as the board row); attention v12 and decode_layer v8 on HOLD (scored launch
 - Checks: MoE 6 of 20 used (v11, v12, v14, v15, v16, v17 MoE checks); attention 1; decode_layer 1; bf16 0.
 - Submits: 0 of 10 used on every problem.
 
+## Oct 29 ~12:20 AM ET resume (successor worker)
+- Branch moe-packed-dequant pushed (was local only). bf16 v8/v9/v10 checks: 1.061x / 0.727x / 0.769x (all
+  below the board 1.115x; stream-K and the 12-bit lossless weights lose to cuBLAS) -> bf16 parked.
+- MoE v18_gemv (check a428ce02220746c9): CUDA-core grouped split-K GEMV for bs <= 32 (1-8 routes per
+  expert; no tensor cores, so no smem/wgmma round trip), Marlin v9b path for bs 128/256. Its prepare()
+  prints a config bench (BENCH lines in the .log) vs Marlin on synthetic routings; exploration only.
+
 ## MoE Triton rewrite (branch moe-packed-dequant; check-only so far, none beats Marlin yet)
 | check | file | speedup | what changed |
 |---|---|---|---|
