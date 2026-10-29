@@ -4,7 +4,9 @@ padded to 16 as its N side), with split-K + FP32 atomics for the narrow router.
 
 - BF16 layers: out^T[n, m] = W[n, :] . x[m, :], FP32 accumulation, BF16 store. Weights untouched.
 - Router: FP32 weights as a BF16 hi + lo pair (allowed by the rules at any m), both dotted
-  against the same x tile in one pass, FP32 accumulation, split-K with FP32 atomic adds.
+  against the same x tile in one pass, FP32 accumulation, split-K with FP32 atomic adds
+  (order-nondeterministic in the last FP32 bits, ~1e-7 relative; allowed by the rules; a
+  deterministic partials + reduce variant costs an extra launch, see sweep C).
 - Router above 32 tokens: the same hi + lo products as SGLang's two cuBLAS GEMMs, run as one
   cuBLAS GEMM against the stacked [hi; lo] weights (FP32 out), then hi-part + lo-part in FP32.
 - Where cuBLAS won in H200 check runs (qkv_gate, unpooler, and every other layer above 32
@@ -97,25 +99,17 @@ def prepare(weights):
     lo = (router - hi.float()).to(torch.bfloat16)
     state["router_hi"] = hi.contiguous()
     state["router_lo"] = lo.contiguous()
-    state["router_hi_t"] = hi.t().contiguous()
-    state["router_lo_t"] = lo.t().contiguous()
     state["router_hilo_t"] = torch.cat([hi, lo], 0).t().contiguous()  # [K, 2N]: hi columns, then lo
     return state
 
 
 def _baseline(x, layer, n, state):
-    """SGLang's own path (as in baseline.py), kept where it is faster."""
-    if layer != "router":
-        try:
-            from sglang.srt.layers.quantization.unquant import _bf16_gemm_dispatch_impl
-        except Exception:  # local CPU testing only
-            return x @ state[layer][:n].T
-        return _bf16_gemm_dispatch_impl(x, state[layer][:n], None)
-    if x.device.type == "cpu":  # local CPU testing only
-        return x.float() @ (state["router_hi"].float() + state["router_lo"].float()).T
-    acc = torch.mm(x, state["router_hi_t"], out_dtype=torch.float32)
-    acc += torch.mm(x, state["router_lo_t"], out_dtype=torch.float32)
-    return acc
+    """SGLang's own path for the BF16 layers (as in baseline.py), kept where it is faster.
+    (The router never comes here: Triton up to 32 tokens, _router_stacked above.)"""
+    if x.device.type == "cpu":  # local CPU testing only (no SGLang / cuBLAS bf16 path)
+        return x @ state[layer][:n].T
+    from sglang.srt.layers.quantization.unquant import _bf16_gemm_dispatch_impl
+    return _bf16_gemm_dispatch_impl(x, state[layer][:n], None)
 
 
 def kernel_fn(data, state):
@@ -152,8 +146,8 @@ def kernel_fn(data, state):
 
 def _router_stacked(x, state):
     """Router above 32 tokens: SGLang's hi + lo pair as ONE cuBLAS GEMM against the stacked
-    [hi; lo] weights (FP32 out), then hi-part + lo-part: the same two FP32-accumulated products
-    and the same final FP32 add as SGLang's two torch.mm calls, in one GEMM launch
+    [hi; lo] weights (FP32 out), then hi-part + lo-part: the same precision as SGLang's two
+    torch.mm calls (BF16 inputs, FP32 accumulation, FP32 add), in one GEMM launch
     (1.56-1.60x at 128 / 256 tokens in check c3f668686d154849)."""
     if x.device.type == "cpu":  # local CPU testing only
         both = x.float() @ state["router_hilo_t"].float()

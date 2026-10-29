@@ -69,6 +69,19 @@ attention 2.61/1.94/1.62/1.13, MoE 2.36/1.95/1.72/1.24, decode_layer 2.14/1.73/1
   kernel beats FA3 by 1.07× on full decode and 1.25–1.35× on sliding decode; verify-8 full is still worse
   (64–128-row blocks), so FA3 is kept there.
 
+## Why full decode splits at batch 1 vs batch >= 2 (audit r2 nit)
+Batch 1 has one request: 4 programs/SM already hits the 256-split cap (span // 256 and the 256
+limit), and 16/SM would only add combine work; the V-load hoist was only measured at b16/b32. From
+batch 2 up, 4/SM leaves the GPU under-filled (b16: 512 programs of ~5,400 keys each), so 16/SM +
+hoist (check runs 172c76d6, fd78956d, bb656112: 160/296 us vs 178/349 us at b16/b32). Since audit
+r2 m5 the split count is no longer floored to a power of two (batch 17 got ~8/SM): see PR
+audit-r2-fixes.
+
+## Resubmit of MoE 1b5c613200e84954 under Arman's token (Oct 28 ~6:25 PM ET)
+`okc submit` of the byte-identical file (sha256 76bb16baff1fe0a6…, via tools/okc_send.py) returned
+job cdfb626e97b84cc8 with status **duplicate** (`duplicate_of: 1b5c613200e84954`, same content
+hash): the judge did not rerun it, no run was used (8/10 left), and no new board entry exists.
+
 ## Job ledger (every okc job; times ET; sha256 = first 16 hex of the runs/ file as committed)
 
 Caveat (audit m2): files before the ledger existed were not hashed at send time; `04269b7477f74417`'s
