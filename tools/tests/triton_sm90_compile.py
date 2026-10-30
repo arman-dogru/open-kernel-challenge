@@ -10,7 +10,7 @@
 Run from muse_attention_decode/. The interpreter does not type-check (attention v18's check 639cbea473a548e1 failed on an
 if-branch redefining a variable's type); the compile step runs the real code generator, so that class of error fails here.
 """
-import os, sys, pickle, inspect, subprocess, importlib.util, re, tempfile
+import os, sys, json, pickle, inspect, subprocess, importlib.util, re, tempfile
 
 TORCH2TT = {"float32": "fp32", "bfloat16": "bf16", "float16": "fp16", "float8_e4m3fn": "fp8e4nv", "float8_e5m2": "fp8e5",
             "int32": "i32", "int64": "i64", "int16": "i16", "int8": "i8", "uint8": "u8", "bool": "i1"}
@@ -84,6 +84,11 @@ def compile_all(sub, inp):
         sig = {n: t for n, t, _ in rec}
         cx = {n: v for n, t, v in rec if t == "constexpr"}
         o = dict(opts)
+        # SM90_EXTRA_OPTS='{"kernel:K=V:K2=V2": {"maxnreg": 168}}' adds launch options to matching specializations
+        for pat, extra in json.loads(os.environ.get("SM90_EXTRA_OPTS", "{}")).items():
+            kname, *conds = pat.split(":")
+            if kname == name and all(str(cx.get(c.split("=")[0])) == c.split("=")[1] for c in conds):
+                o.update(extra)
         short = {k: v for k, v in cx.items() if isinstance(v, (int, bool, str))}
         try:
             k = triton.compile(ASTSource(fn, sig, cx), target=GPUTarget("cuda", 90, 128), options=o)
