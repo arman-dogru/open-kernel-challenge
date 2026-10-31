@@ -23,8 +23,8 @@ def sub(old, new):
 
 FV = '''_FV_SRC = r"""
 ''' + cu + '''"""
-FV_BN, FV_ST = 64, 5  # must match BN / ST in tools/attn_v22_fv.cu
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T (2 heads x 64 x 128 B), 1 KB alignment
+FV_BN, FV_ST = 64, 4  # must match BN / ST in tools/attn_v22_fv.cu
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T and Q (2 heads x 64 x 128 B), alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 
@@ -59,6 +59,10 @@ def _fv_ok(kind, L, batch, hq, hkv, d, q):
     return kind == "full" and L == 8 and batch >= 2 and (hq, hkv, d) == (16, 2, 64) and q.device.type == "cuda"
 
 
+def _fv_page_ok(page):
+    return page & (page - 1) == 0  # the kernel indexes pages by shift
+
+
 def _fv(data, q, qkv, cfg):
     """Full verify at batch >= 2: CUDA split-KV partials (tools/attn_v22_fv.cu), then the Triton combine."""
     import cupy as cp
@@ -82,7 +86,7 @@ def _fv(data, q, qkv, cfg):
             np.uint64(pt.data_ptr()), np.int32(pt.stride(0)), np.uint64(sl.data_ptr()),
             np.uint64(data["k_scale"].data_ptr()), np.uint64(data["v_scale"].data_ptr()),
             np.uint64(o_part.data_ptr()), np.uint64(lse.data_ptr()),
-            np.float32(cfg["sm_scale"] * cfg["qk_scale_factor"]), np.int32(chunk), np.int32(page), np.int32(nsplit),
+            np.float32(cfg["sm_scale"] * cfg["qk_scale_factor"]), np.int32(chunk), np.int32(page.bit_length() - 1), np.int32(nsplit),
             np.int32(hq)), shared_mem=FV_SMEM)
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
@@ -93,7 +97,7 @@ def _fv(data, q, qkv, cfg):
 
 def kernel_fn(data):'''
 sub("def kernel_fn(data):", FV)
-sub('''    if path is None and q.device.type == "cpu":''', '''    if path is None and _fv_ok(kind, L, batch, hq, hkv, d, q):
+sub('''    if path is None and q.device.type == "cpu":''', '''    if path is None and _fv_ok(kind, L, batch, hq, hkv, d, q) and _fv_page_ok(cfg["page_size"]):
         return _fv(data, q, qkv, cfg)  # v22: CUDA full-verify kernel instead of FA3
     if path is None and q.device.type == "cpu":''')
 sub('# okc: problem=muse_attention_decode\n"""v20:', '# okc: problem=muse_attention_decode\n'

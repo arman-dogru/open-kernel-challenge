@@ -493,7 +493,8 @@ _FV_SRC = r"""
 #define G 8
 #define LQ 8
 #define BN 64
-#define ST 5  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
+#define ST 4  // cp.async stages (power of two): ST - 1 tiles (16 KB each) in flight per CTA
+#define QH 8192  // Q bytes per KV head in shared memory: 64 rows x 128 B (64 used), 128-byte swizzle
 #define KROW 128
 #define VTH 8192  // V^T bytes per head: 64 dims x 128-byte rows (64 key slots used), 128-byte swizzle
 #define TILE (BN * KROW)
@@ -531,6 +532,18 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
                : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]), "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]), "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]), "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]), "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]), "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]), "+f"(acc[7][2]), "+f"(acc[7][3])                                                                         \
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),         \
                  "l"(d0), "l"(d1) : "memory")
+#define WG_QK_SS(acc, da, db, sc)                                                                          \
+  asm volatile("{ .reg .pred p; setp.ne.b32 p, %34, 0;\n"                                                        \
+               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13," \
+               "%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, %32, %33, p, 1, 1; }"       \
+               : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]),              \
+                 "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]),              \
+                 "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]),              \
+                 "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]),              \
+                 "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]),              \
+                 "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]),              \
+                 "+f"(acc[7][2]), "+f"(acc[7][3])                                                                 \
+               : "l"(da), "l"(db), "r"(sc))
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;" ::: "memory"); }
 __device__ __forceinline__ void wg_commit_wait() {
   asm volatile("wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;" ::: "memory");
@@ -547,13 +560,14 @@ extern "C" __global__ void __launch_bounds__(256, 2)
 attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char* __restrict__ kc,
         const unsigned char* __restrict__ vc, const int* __restrict__ pt, int stride_pt,
         const int* __restrict__ seqlens, const float* __restrict__ ksp, const float* __restrict__ vsp,
-        float* __restrict__ o_part, float* __restrict__ lse_out, float qk_scale, int chunk, int page,
+        float* __restrict__ o_part, float* __restrict__ lse_out, float qk_scale, int chunk, int page_shift,
         int nsplit, int hq) {
   extern __shared__ __align__(128) unsigned char smem_raw[];
   unsigned char* smem = smem_raw + ((1024 - (smem_u32(smem_raw) & 1023)) & 1023);  // 1024-aligned (SW128 atoms)
   unsigned char* Ks = smem;
   unsigned char* Vs = smem + ST * TILE;
   unsigned char* Vt = smem + 2 * ST * TILE;
+  unsigned char* Qs = Vt + 2 * VTH;
   const float NEG = __int_as_float(0xff800000);
   const int s = blockIdx.x, b = blockIdx.y;
   const int tid = threadIdx.x, warp = tid >> 5, lane = tid & 31;
@@ -568,10 +582,15 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   const int pos0 = seq + j0, pos1 = seq + j1;
   const int head = h * G + g;
 
-  // Q fragments (wgmma A, row g / g + 8 = tokens j0 / j1): re-read every tile with volatile loads (L1 hits). Kept in
-  // registers across the loop, ptxas (CUDA 13 NVRTC) reused them as scratch after the first tile's QGMMA (SASS).
-  const unsigned char* q0 = q + (long long)(b * LQ + j0) * stride_qt + head * D + t4 * 4;
-  const unsigned char* q1 = q + (long long)(b * LQ + j1) * stride_qt + head * D + t4 * 4;
+  {  // Q -> shared memory once (wgmma A operand by descriptor). Row m of KV head hh's 64 = token 2 (m >> 4) +
+     // ((m >> 3) & 1), query head hh * 8 + (m & 7): warp wi's accumulator rows wi * 16 + g / + 8 are tokens j0 / j1.
+    const int row = tid >> 1, hh = row >> 6, m = row & 63;
+    const int tok = 2 * (m >> 4) + ((m >> 3) & 1), qh = hh * G + (m & 7);
+    const unsigned char* src = q + (long long)(b * LQ + tok) * stride_qt + qh * D;
+#pragma unroll
+    for (int c = (tid & 1) * 2; c < (tid & 1) * 2 + 2; ++c)
+      *(uint4*)(Qs + hh * QH + m * 128 + ((c ^ (m & 7)) << 4)) = *(const uint4*)(src + c * 16);
+  }
   const float scale = qk_scale * ksp[0] * 1.4426950408889634f;
   const float vsc = vsp[0];
 
@@ -580,8 +599,8 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   auto rowof = [&](int tile) -> long long {
     int t = lo + tile * BN + kl;
     if (tile < ntiles && t < hi) {
-      int p = pt[(long long)b * stride_pt + t / page];
-      return (long long)p * page + t % page;
+      int p = pt[(long long)b * stride_pt + (t >> page_shift)];
+      return ((long long)p << page_shift) + (t & ((1 << page_shift) - 1));
     }
     return -1;
   };
@@ -606,6 +625,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   for (int n = 0; n < 8; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
   float m0 = NEG, m1 = NEG, l0 = 0.f, l1 = 0.f;
 
+  asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // Q (st.shared) -> wgmma; the loop's first barrier orders it
 #pragma unroll
   for (int k = 0; k < ST - 1; ++k) issue(k, rowof(k));
   long long nextrow = rowof(ST - 1);
@@ -639,22 +659,15 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     }
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // cp.async / st.shared -> wgmma (async proxy)
     __syncthreads();
-    unsigned qt[2][4];
-#pragma unroll
-    for (int ks = 0; ks < 2; ++ks) {
-      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][0]) : "l"(q0 + ks * 32));
-      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][1]) : "l"(q1 + ks * 32));
-      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][2]) : "l"(q0 + ks * 32 + 16));
-      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][3]) : "l"(q1 + ks * 32 + 16));
-    }
     issue(i + ST - 1, nextrow);
     nextrow = rowof(i + ST);
 
     const unsigned kt = smem_u32(Ks + (i % ST) * TILE) + h * 64;
     float sc[8][4] = {};
     wg_fence();
-    WG_QK(sc, qt[0], desc(kt, 1024, 1), 0);
-    WG_QK(sc, qt[1], desc(kt + 32, 1024, 1), 1);
+    const unsigned qs = smem_u32(Qs + h * QH);
+    WG_QK_SS(sc, desc(qs, 1024, 1), desc(kt, 1024, 1), 0);
+    WG_QK_SS(sc, desc(qs + 32, 1024, 1), desc(kt + 32, 1024, 1), 1);
     wg_commit_wait();
     const int base = lo + i * BN;
     if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
@@ -721,8 +734,8 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   }
 }
 """
-FV_BN, FV_ST = 64, 5  # must match BN / ST in tools/attn_v22_fv.cu
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T (2 heads x 64 x 128 B), 1 KB alignment
+FV_BN, FV_ST = 64, 4  # must match BN / ST in tools/attn_v22_fv.cu
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T and Q (2 heads x 64 x 128 B), alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 
@@ -757,6 +770,10 @@ def _fv_ok(kind, L, batch, hq, hkv, d, q):
     return kind == "full" and L == 8 and batch >= 2 and (hq, hkv, d) == (16, 2, 64) and q.device.type == "cuda"
 
 
+def _fv_page_ok(page):
+    return page & (page - 1) == 0  # the kernel indexes pages by shift
+
+
 def _fv(data, q, qkv, cfg):
     """Full verify at batch >= 2: CUDA split-KV partials (tools/attn_v22_fv.cu), then the Triton combine."""
     import cupy as cp
@@ -780,7 +797,7 @@ def _fv(data, q, qkv, cfg):
             np.uint64(pt.data_ptr()), np.int32(pt.stride(0)), np.uint64(sl.data_ptr()),
             np.uint64(data["k_scale"].data_ptr()), np.uint64(data["v_scale"].data_ptr()),
             np.uint64(o_part.data_ptr()), np.uint64(lse.data_ptr()),
-            np.float32(cfg["sm_scale"] * cfg["qk_scale_factor"]), np.int32(chunk), np.int32(page), np.int32(nsplit),
+            np.float32(cfg["sm_scale"] * cfg["qk_scale_factor"]), np.int32(chunk), np.int32(page.bit_length() - 1), np.int32(nsplit),
             np.int32(hq)), shared_mem=FV_SMEM)
     gate = qkv[:, (hq + 2 * hkv) * d:]
     out = torch.empty((T, hq * d), device=qkv.device, dtype=data["qkv"].dtype)
@@ -801,7 +818,7 @@ def kernel_fn(data):
         q = _norm_rope_store_fused(data, qkv, cfg, FP8)
     kind = "sliding" if cfg["window"] else "full"
     path = _attn_path(kind, L, batch, hkv, d)
-    if path is None and _fv_ok(kind, L, batch, hq, hkv, d, q):
+    if path is None and _fv_ok(kind, L, batch, hq, hkv, d, q) and _fv_page_ok(cfg["page_size"]):
         return _fv(data, q, qkv, cfg)  # v22: CUDA full-verify kernel instead of FA3
     if path is None and q.device.type == "cpu":
         path = ("head", 64, 4, 3, 4, False)  # local CPU tests exercise the split-KV kernel everywhere
