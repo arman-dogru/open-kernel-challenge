@@ -117,7 +117,9 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   const float vsc = vsp[0];
 
   // loader: key kl of the tile, 16-byte chunks c0, c0 + 1 of its 128-byte K and V rows
-  const int kl = tid >> 2, c0 = (tid & 3) * 2;
+  // warpgroup h loads, transposes and syncs only KV head h's 64-byte half of each row (named barrier 1 + h), so
+  // the two warpgroups run decoupled
+  const int kl = (tid & 127) >> 1, c0 = h * 4 + (tid & 1) * 2;
   auto rowof = [&](int tile) -> long long {
     int t = lo + tile * BN + kl;
     if (tile < ntiles && t < hi) {
@@ -153,13 +155,13 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   long long nextrow = rowof(ST - 1);
   for (int i = 0; i < ntiles; ++i) {
     asm volatile("cp.async.wait_group %0;" :: "n"(ST - 2));
-    __syncthreads();
+    asm volatile("bar.sync %0, 128;" :: "r"(1 + h) : "memory");
     {  // V tile i -> V^T: task = 4 dims (dg) x 4 key slots (sg); slot 4t + 2a' + e of 32-key block <- key 8(2A + a') + 2t + e
       const unsigned char* vsrc = Vs + (i % ST) * TILE;
 #pragma unroll
       for (int rep = 0; rep < 2; ++rep) {
-        const int combo = warp + 8 * rep;
-        const int dg = (lane & 7) + 8 * (combo & 3), sg = (lane >> 3) + 4 * (combo >> 2);
+        const int combo = wi + 4 * rep;
+        const int dg = h * 16 + (lane & 7) + 8 * (combo & 1), sg = (lane >> 3) + 4 * (combo >> 1);
         const int blk = sg >> 3, sl = sg & 7, tt = sl & 3, A = sl >> 2;
         const int k0 = blk * 32 + 16 * A + 2 * tt;
         const int kk[4] = {k0, k0 + 1, k0 + 8, k0 + 9};
@@ -180,7 +182,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
       }
     }
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // cp.async / st.shared -> wgmma (async proxy)
-    __syncthreads();
+    asm volatile("bar.sync %0, 128;" :: "r"(1 + h) : "memory");
     issue(i + ST - 1, nextrow);
     nextrow = rowof(i + ST);
 
