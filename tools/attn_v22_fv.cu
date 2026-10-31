@@ -1,7 +1,7 @@
 // Full-attention verify (q_len 8) split-KV partials for tp8 (16 query / 2 KV heads, D 64), attention v22.
 // One CTA per (split s, request b), 8 warps: warps 0-3 serve KV head 0, 4-7 KV head 1; each warp owns 16 rows
 // (row r = token * 8 + query head within the group, as the Triton head kernel). K/V rows (both heads, 128 B per
-// key) are gathered through the page table by a 3-stage cp.async pipeline of 64-key tiles (16-byte chunks
+// key) are gathered through the page table by an ST-stage cp.async pipeline of 64-key tiles (16-byte chunks
 // XOR-swizzled by key & 7), page indices loaded one tile ahead. S = Q.K^T on FP8 mma.sync m16n8k32 (queries
 // already E4M3, as FA3's FP8 path) on wgmma m64n64k32 (one warpgroup per KV head: its 64 rows = 8 query heads x 8
 // tokens; A = Q fragments from registers, B = the K tile through a 128-byte-swizzle descriptor), online softmax in
@@ -15,7 +15,7 @@
 #define G 8
 #define LQ 8
 #define BN 64
-#define ST 3
+#define ST 5  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
 #define KROW 128
 #define VTH 8192  // V^T bytes per head: 64 dims x 128-byte rows (64 key slots used), 128-byte swizzle
 #define TILE (BN * KROW)
@@ -128,11 +128,11 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   for (int n = 0; n < 8; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
   float m0 = NEG, m1 = NEG, l0 = 0.f, l1 = 0.f;
 
-  issue(0, rowof(0));
-  issue(1, rowof(1));
-  long long nextrow = rowof(2);
+#pragma unroll
+  for (int k = 0; k < ST - 1; ++k) issue(k, rowof(k));
+  long long nextrow = rowof(ST - 1);
   for (int i = 0; i < ntiles; ++i) {
-    asm volatile("cp.async.wait_group 1;" ::);
+    asm volatile("cp.async.wait_group %0;" :: "n"(ST - 2));
     __syncthreads();
     {  // V tile i -> V^T: task = 4 dims (dg) x 4 key slots (sg); slot 4t + 2a' + e of 32-key block <- key 8(2A + a') + 2t + e
       const unsigned char* vsrc = Vs + (i % ST) * TILE;
@@ -169,8 +169,8 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
       asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][2]) : "l"(q0 + ks * 32 + 16));
       asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][3]) : "l"(q1 + ks * 32 + 16));
     }
-    issue(i + 2, nextrow);
-    nextrow = rowof(i + 3);
+    issue(i + ST - 1, nextrow);
+    nextrow = rowof(i + ST);
 
     const unsigned kt = smem_u32(Ks + (i % ST) * TILE) + h * 64;
     float sc[8][4] = {};
