@@ -496,7 +496,7 @@ _FV_SRC = r"""
 #define ST 3  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
 #define QH 8192  // Q bytes per KV head in shared memory: 64 rows x 128 B (64 used), 128-byte swizzle
 #define KROW 128
-#define VTH 8192  // V^T bytes per head: 64 dims x 128-byte rows (64 key slots used), 128-byte swizzle
+#define VTH 9216  // V^T bytes per head: 64 dims + 8 rows of ones (row sums of P) x 128-byte rows, 128-byte swizzle
 #define TILE (BN * KROW)
 
 __device__ __forceinline__ unsigned smem_u32(const void* p) {
@@ -526,10 +526,10 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "l"(d), "n"(0), "r"(sc))
 #define WG_PV2(acc, a, b, d0, d1)                                                                           \
   asm volatile("wgmma.fence.sync.aligned;\n"                                                                   \
-               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%32,%33,%34,%35}, %40, 1, 1, 1;\n" \
-               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%36,%37,%38,%39}, %41, 1, 1, 1;\n" \
+               "wgmma.mma_async.sync.aligned.m64n72k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31,%32,%33,%34,%35}, {%36,%37,%38,%39}, %44, 1, 1, 1;\n" \
+               "wgmma.mma_async.sync.aligned.m64n72k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31,%32,%33,%34,%35}, {%40,%41,%42,%43}, %45, 1, 1, 1;\n" \
                "wgmma.commit_group.sync.aligned;"                                                                 \
-               : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]), "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]), "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]), "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]), "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]), "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]), "+f"(acc[7][2]), "+f"(acc[7][3])                                                                         \
+               : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]), "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]), "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]), "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]), "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]), "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]), "+f"(acc[7][2]), "+f"(acc[7][3]), "+f"(acc[8][0]), "+f"(acc[8][1]), "+f"(acc[8][2]), "+f"(acc[8][3])                                                                         \
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),         \
                  "l"(d0), "l"(d1) : "memory")
 #define WG_QK_SS(acc, da, db, sc)                                                                          \
@@ -545,7 +545,7 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
                  "+f"(acc[7][2]), "+f"(acc[7][3])                                                                 \
                : "l"(da), "l"(db), "r"(sc))
 #define WG_WAIT_SO(sacc, oacc)                                                                              \
-  asm volatile("wgmma.wait_group.sync.aligned 0;" : "+f"(sacc[0][0]), "+f"(sacc[0][1]), "+f"(sacc[0][2]), "+f"(sacc[0][3]), "+f"(sacc[1][0]), "+f"(sacc[1][1]), "+f"(sacc[1][2]), "+f"(sacc[1][3]), "+f"(sacc[2][0]), "+f"(sacc[2][1]), "+f"(sacc[2][2]), "+f"(sacc[2][3]), "+f"(sacc[3][0]), "+f"(sacc[3][1]), "+f"(sacc[3][2]), "+f"(sacc[3][3]), "+f"(sacc[4][0]), "+f"(sacc[4][1]), "+f"(sacc[4][2]), "+f"(sacc[4][3]), "+f"(sacc[5][0]), "+f"(sacc[5][1]), "+f"(sacc[5][2]), "+f"(sacc[5][3]), "+f"(sacc[6][0]), "+f"(sacc[6][1]), "+f"(sacc[6][2]), "+f"(sacc[6][3]), "+f"(sacc[7][0]), "+f"(sacc[7][1]), "+f"(sacc[7][2]), "+f"(sacc[7][3]), "+f"(oacc[0][0]), "+f"(oacc[0][1]), "+f"(oacc[0][2]), "+f"(oacc[0][3]), "+f"(oacc[1][0]), "+f"(oacc[1][1]), "+f"(oacc[1][2]), "+f"(oacc[1][3]), "+f"(oacc[2][0]), "+f"(oacc[2][1]), "+f"(oacc[2][2]), "+f"(oacc[2][3]), "+f"(oacc[3][0]), "+f"(oacc[3][1]), "+f"(oacc[3][2]), "+f"(oacc[3][3]), "+f"(oacc[4][0]), "+f"(oacc[4][1]), "+f"(oacc[4][2]), "+f"(oacc[4][3]), "+f"(oacc[5][0]), "+f"(oacc[5][1]), "+f"(oacc[5][2]), "+f"(oacc[5][3]), "+f"(oacc[6][0]), "+f"(oacc[6][1]), "+f"(oacc[6][2]), "+f"(oacc[6][3]), "+f"(oacc[7][0]), "+f"(oacc[7][1]), "+f"(oacc[7][2]), "+f"(oacc[7][3]) :: "memory")
+  asm volatile("wgmma.wait_group.sync.aligned 0;" : "+f"(sacc[0][0]), "+f"(sacc[0][1]), "+f"(sacc[0][2]), "+f"(sacc[0][3]), "+f"(sacc[1][0]), "+f"(sacc[1][1]), "+f"(sacc[1][2]), "+f"(sacc[1][3]), "+f"(sacc[2][0]), "+f"(sacc[2][1]), "+f"(sacc[2][2]), "+f"(sacc[2][3]), "+f"(sacc[3][0]), "+f"(sacc[3][1]), "+f"(sacc[3][2]), "+f"(sacc[3][3]), "+f"(sacc[4][0]), "+f"(sacc[4][1]), "+f"(sacc[4][2]), "+f"(sacc[4][3]), "+f"(sacc[5][0]), "+f"(sacc[5][1]), "+f"(sacc[5][2]), "+f"(sacc[5][3]), "+f"(sacc[6][0]), "+f"(sacc[6][1]), "+f"(sacc[6][2]), "+f"(sacc[6][3]), "+f"(sacc[7][0]), "+f"(sacc[7][1]), "+f"(sacc[7][2]), "+f"(sacc[7][3]), "+f"(oacc[0][0]), "+f"(oacc[0][1]), "+f"(oacc[0][2]), "+f"(oacc[0][3]), "+f"(oacc[1][0]), "+f"(oacc[1][1]), "+f"(oacc[1][2]), "+f"(oacc[1][3]), "+f"(oacc[2][0]), "+f"(oacc[2][1]), "+f"(oacc[2][2]), "+f"(oacc[2][3]), "+f"(oacc[3][0]), "+f"(oacc[3][1]), "+f"(oacc[3][2]), "+f"(oacc[3][3]), "+f"(oacc[4][0]), "+f"(oacc[4][1]), "+f"(oacc[4][2]), "+f"(oacc[4][3]), "+f"(oacc[5][0]), "+f"(oacc[5][1]), "+f"(oacc[5][2]), "+f"(oacc[5][3]), "+f"(oacc[6][0]), "+f"(oacc[6][1]), "+f"(oacc[6][2]), "+f"(oacc[6][3]), "+f"(oacc[7][0]), "+f"(oacc[7][1]), "+f"(oacc[7][2]), "+f"(oacc[7][3]), "+f"(oacc[8][0]), "+f"(oacc[8][1]), "+f"(oacc[8][2]), "+f"(oacc[8][3]) :: "memory")
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;" ::: "memory"); }
 __device__ __forceinline__ void wg_commit_wait() {
   asm volatile("wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;" ::: "memory");
@@ -622,10 +622,14 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     asm volatile("cp.async.commit_group;" ::);
   };
 
-  float oacc[8][4];
+  float oacc[9][4];  // [0..7]: O (64 dims); [8]: sum of P over keys (V^T rows 64..71 are ones)
 #pragma unroll
-  for (int n = 0; n < 8; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
-  float m0 = NEG, m1 = NEG, l0 = 0.f, l1 = 0.f;
+  for (int n = 0; n < 9; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
+  float m0 = NEG, m1 = NEG;
+  for (int k = tid; k < 2 * 2 * 8 * 8; k += 256) {  // ones rows: 2 buffers x 2 heads x 8 rows x 8 chunks (E4M3 1.0)
+    const int buf_head = k >> 6, rr = (k >> 3) & 7, c = k & 7;
+    *(uint4*)(Vt + buf_head * VTH + (64 + rr) * 128 + c * 16) = make_uint4(0x38383838u, 0x38383838u, 0x38383838u, 0x38383838u);
+  }
 
   asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // Q (st.shared) -> wgmma; the loop's first barrier orders it
 #pragma unroll
@@ -696,15 +700,15 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     const float ms0 = mn0 == NEG ? 0.f : mn0, ms1 = mn1 == NEG ? 0.f : mn1;
     const float a0 = ex2(m0 - ms0), a1 = ex2(m1 - ms1);
     const float nb0 = 8.f - ms0, nb1 = 8.f - ms1;  // p = 2^(s - m + 8) in (0, 256]
-    float s0 = 0.f, s1 = 0.f;
 #pragma unroll
     for (int n = 0; n < 8; ++n) {
       sc[n][0] = ex2(fmaf(sc[n][0], scale, nb0)); sc[n][1] = ex2(fmaf(sc[n][1], scale, nb0));
       sc[n][2] = ex2(fmaf(sc[n][2], scale, nb1)); sc[n][3] = ex2(fmaf(sc[n][3], scale, nb1));
-      s0 += sc[n][0] + sc[n][1]; s1 += sc[n][2] + sc[n][3];
-      oacc[n][0] *= a0; oacc[n][1] *= a0; oacc[n][2] *= a1; oacc[n][3] *= a1;
     }
-    l0 = l0 * a0 + s0; l1 = l1 * a1 + s1;
+    if (!__all_sync(0xffffffff, mn0 == m0 && mn1 == m1)) {  // rescale O (and the row sums) only if a max moved
+#pragma unroll
+      for (int n = 0; n < 9; ++n) { oacc[n][0] *= a0; oacc[n][1] *= a0; oacc[n][2] *= a1; oacc[n][3] *= a1; }
+    }
     m0 = mn0; m1 = mn1;
     unsigned pa[2][4];
 #pragma unroll
@@ -725,8 +729,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     WG_WAIT_SO(dummy, oacc);  // last tile's P.V
   }
   asm volatile("cp.async.wait_group 0;" ::);
-  l0 += __shfl_xor_sync(0xffffffff, l0, 1); l0 += __shfl_xor_sync(0xffffffff, l0, 2);
-  l1 += __shfl_xor_sync(0xffffffff, l1, 1); l1 += __shfl_xor_sync(0xffffffff, l1, 2);
+  const float l0 = oacc[8][0], l1 = oacc[8][2];  // full row sums (every key column of the tile went through the MMA)
   const float f0 = vsc / (l0 > 0.f ? l0 : 1.f), f1 = vsc / (l1 > 0.f ? l1 : 1.f);
   const long long i0 = ((long long)(b * LQ + j0) * hq + head) * nsplit + s;
   const long long i1 = ((long long)(b * LQ + j1) * hq + head) * nsplit + s;
@@ -742,7 +745,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 }
 """
 FV_BN, FV_ST = 64, 3  # must match BN / ST in tools/attn_v22_fv.cu
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 8192 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers and Q (2 heads x 64 x 128 B), alignment
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 
