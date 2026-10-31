@@ -483,7 +483,7 @@ _FV_SRC = r"""
 // XOR-swizzled by key & 7), page indices loaded one tile ahead. S = Q.K^T on FP8 mma.sync m16n8k32 (queries
 // already E4M3, as FA3's FP8 path) on wgmma m64n64k32 (one warpgroup per KV head: its 64 rows = 8 query heads x 8
 // tokens; A = Q fragments from registers, B = the K tile through a 128-byte-swizzle descriptor), online softmax in
-// registers (exp2 domain), P . V also on FP8 wgmma (A = P from registers, B = V^T, 64-byte swizzle): P (scaled by 2^8 into E4M3's range) is packed straight from the S accumulators, and V is transposed per
+// registers (exp2 domain), P . V also on FP8 wgmma (A = P from registers, B = V^T in 128-byte-swizzle rows): P (scaled by 2^8 into E4M3's range) is packed straight from the S accumulators, and V is transposed per
 // tile into V^T [head * 64 + d][key slot] with key slots permuted to match the S accumulator layout (4x4 byte
 // transposes by prmt), so a B fragment is one 32-bit shared load. Output: per row
 // the partial o = acc * v_scale / l and lse = m + log2(l) in the Triton head kernel's layout, so the same
@@ -495,7 +495,7 @@ _FV_SRC = r"""
 #define BN 64
 #define ST 3
 #define KROW 128
-#define VTH 4096  // V^T bytes per head: 64 dims x 64 key slots, 64-byte swizzle
+#define VTH 8192  // V^T bytes per head: 64 dims x 128-byte rows (64 key slots used), 128-byte swizzle
 #define TILE (BN * KROW)
 
 __device__ __forceinline__ unsigned smem_u32(const void* p) {
@@ -631,9 +631,9 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
         const unsigned o4[4] = {__byte_perm(x, y, 0x5410), __byte_perm(x, y, 0x7632), __byte_perm(x2, y2, 0x5410),
                                 __byte_perm(x2, y2, 0x7632)};
 #pragma unroll
-        for (int r = 0; r < 4; ++r) {  // row = head * 64 + d; 64-byte rows, 16-byte chunk ^= (row >> 1) & 3
+        for (int r = 0; r < 4; ++r) {  // row = head * 64 + d; 128-byte rows, 16-byte chunk ^= row & 7
           const int row = dg * 4 + r;
-          *(unsigned*)(Vt + row * 64 + ((((slot >> 4) ^ ((row >> 1) & 3))) << 4) + (slot & 15)) = o4[r];
+          *(unsigned*)(Vt + row * 128 + (((slot >> 4) ^ (row & 7)) << 4) + (slot & 15)) = o4[r];
         }
       }
     }
@@ -682,17 +682,19 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     }
     l0 = l0 * a0 + s0; l1 = l1 * a1 + s1;
     m0 = mn0; m1 = mn1;
+    unsigned pa[2][4];
 #pragma unroll
     for (int kb = 0; kb < 2; ++kb) {
       const int n0 = kb * 4;
-      const unsigned pa0 = pack_e4(sc[n0][0], sc[n0][1], sc[n0 + 1][0], sc[n0 + 1][1]);
-      const unsigned pa1 = pack_e4(sc[n0][2], sc[n0][3], sc[n0 + 1][2], sc[n0 + 1][3]);
-      const unsigned pa2 = pack_e4(sc[n0 + 2][0], sc[n0 + 2][1], sc[n0 + 3][0], sc[n0 + 3][1]);
-      const unsigned pa3 = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
-      const unsigned pa[4] = {pa0, pa1, pa2, pa3};
-      if (kb == 0) wg_fence();
-      WG_QK(oacc, pa, desc(smem_u32(Vt + h * VTH) + kb * 32, 512, 2), 1);
+      pa[kb][0] = pack_e4(sc[n0][0], sc[n0][1], sc[n0 + 1][0], sc[n0 + 1][1]);
+      pa[kb][1] = pack_e4(sc[n0][2], sc[n0][3], sc[n0 + 1][2], sc[n0 + 1][3]);
+      pa[kb][2] = pack_e4(sc[n0 + 2][0], sc[n0 + 2][1], sc[n0 + 3][0], sc[n0 + 3][1]);
+      pa[kb][3] = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
     }
+    const unsigned vt = smem_u32(Vt + h * VTH);
+    wg_fence();  // after the P fragments and the O rescale are in registers
+    WG_QK(oacc, pa[0], desc(vt, 1024, 1), 1);
+    WG_QK(oacc, pa[1], desc(vt + 32, 1024, 1), 1);
     wg_commit_wait();
   }
   asm volatile("cp.async.wait_group 0;" ::);
@@ -713,7 +715,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 }
 """
 FV_BN, FV_ST = 64, 3
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 4096 + 1024  # K + V E4M3 stages, V^T (2 heads), 1 KB alignment slack
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T (2 heads x 64 x 128 B), 1 KB alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 

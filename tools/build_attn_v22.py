@@ -24,7 +24,7 @@ def sub(old, new):
 FV = '''_FV_SRC = r"""
 ''' + cu + '''"""
 FV_BN, FV_ST = 64, 3
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 4096 + 1024  # K + V E4M3 stages, V^T (2 heads), 1 KB alignment slack
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 8192 + 1024  # K + V E4M3 stages, V^T (2 heads x 64 x 128 B), 1 KB alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 
