@@ -659,7 +659,8 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 #pragma unroll
         for (int r = 0; r < 4; ++r) {  // row = head * 64 + d; 128-byte rows, 16-byte chunk ^= row & 7
           const int row = dg * 4 + r;
-          *(unsigned*)(Vt + (i & 1) * 2 * VTH + row * 128 + (((slot >> 4) ^ (row & 7)) << 4) + (slot & 15)) = o4[r];
+          *(unsigned*)(Vt + (i & 1) * 2 * VTH + (row >> 6) * VTH + (row & 63) * 128 + (((slot >> 4) ^ (row & 7)) << 4) +
+                       (slot & 15)) = o4[r];
         }
       }
     }
