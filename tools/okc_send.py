@@ -1,7 +1,8 @@
 """Send a committed runs/ file to the judge and record its sha256 at send time (audit r2 m1).
 Usage: python tools/okc_send.py check|submit <problem>/runs/<file>.py
 Refuses files that are untracked or differ from HEAD. Appends to sends.tsv:
-time_et  kind  job_id  problem  file  sha256  git_commit"""
+time_et  kind  job_id  problem  file  sha256  git_commit
+A failed send also appends okc's stdout / stderr to sends_failed.log (review round 11 n1)."""
 import datetime, hashlib, json, subprocess, sys
 
 kind, path = sys.argv[1], sys.argv[2]
@@ -26,5 +27,10 @@ same = hashlib.sha256(open(path, "rb").read()).hexdigest() == sha
 with open("sends.tsv", "a") as f:
     f.write("\t".join([now, kind, job_id, problem, path, sha if same else sha + "(FILE CHANGED DURING SEND)", commit]) + "\n")
 if out.returncode or job_id.startswith("UNPARSED") or not same:
+    # review round 11 n1: keep okc's own stdout / stderr of a failed send (okc never echoes OKC_TOKEN)
+    with open("sends_failed.log", "a") as f:
+        f.write(f"=== {now} {kind} {path} sha {sha[:16]} commit {commit} rc={out.returncode}\n")
+        f.write("--- stdout\n" + out.stdout + ("" if out.stdout.endswith("\n") else "\n"))
+        f.write("--- stderr\n" + out.stderr + ("" if out.stderr.endswith("\n") else "\n"))
     sys.exit(out.stdout + out.stderr + ("" if same else "\nfile changed during send"))
 print(job_id, sha[:16])
