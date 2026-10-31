@@ -1,5 +1,5 @@
 # okc: problem=muse_attention_decode
-"""v22: v20b with full-attention verify at batch >= 2 on a CUDA sm_90a split-KV kernel (FP8 / FP16 mma.sync,
+"""v22: v20b with full-attention verify at batch >= 2 on a CUDA sm_90a split-KV kernel (FP8 mma.sync,
 cp.async page-table gather) instead of FA3. See tools/build_attn_v22.py and tools/attn_v22_fv.cu.
 
 v20: v17 + the per-token norm/RoPE/store kernel from 64 tokens and sliding verify on 64-key head-kernel
@@ -481,8 +481,10 @@ _FV_SRC = r"""
 // (row r = token * 8 + query head within the group, as the Triton head kernel). K/V rows (both heads, 128 B per
 // key) are gathered through the page table by a 3-stage cp.async pipeline of 64-key tiles (16-byte chunks
 // XOR-swizzled by key & 7), page indices loaded one tile ahead. S = Q.K^T on FP8 mma.sync m16n8k32 (queries
-// already E4M3, as FA3's FP8 path), online softmax in registers (exp2 domain), P (FP16) . V on mma.sync
-// m16n8k16 with V converted E4M3 -> FP16 (exact) into a swizzled tile read by ldmatrix.trans. Output: per row
+// already E4M3, as FA3's FP8 path), online softmax in registers (exp2 domain), P . V also on FP8 mma.sync
+// m16n8k32: P (scaled by 2^8 into E4M3's range) is packed straight from the S accumulators, and V is transposed per
+// tile into V^T [head * 64 + d][key slot] with key slots permuted to match the S accumulator layout (4x4 byte
+// transposes by prmt), so a B fragment is one 32-bit shared load. Output: per row
 // the partial o = acc * v_scale / l and lse = m + log2(l) in the Triton head kernel's layout, so the same
 // combine/norm/gate kernel merges them.
 #define D 64
@@ -492,7 +494,7 @@ _FV_SRC = r"""
 #define BN 64
 #define ST 3
 #define KROW 128
-#define VROW 256
+#define VT 68  // V^T row stride (bytes): 64 key slots + 4 pad
 #define TILE (BN * KROW)
 
 __device__ __forceinline__ unsigned smem_u32(const void* p) {
@@ -504,11 +506,11 @@ __device__ __forceinline__ void cp16(unsigned dst, const void* src, int bytes) {
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" :: "r"(dst), "l"(src), "r"(bytes));
 }
 __device__ __forceinline__ float ex2(float x) { float y; asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x)); return y; }
-__device__ __forceinline__ unsigned pack_h2(float lo, float hi) {
-  unsigned r; asm("cvt.rn.f16x2.f32 %0, %1, %2;" : "=r"(r) : "f"(hi), "f"(lo)); return r;
-}
-__device__ __forceinline__ unsigned e4m3x2_h2(unsigned short x) {
-  unsigned r; asm("cvt.rn.f16x2.e4m3x2 %0, %1;" : "=r"(r) : "h"(x)); return r;
+__device__ __forceinline__ unsigned pack_e4(float x0, float x1, float x2, float x3) {  // bytes x0 (low) .. x3
+  unsigned short lo, hi;
+  asm("cvt.rn.satfinite.e4m3x2.f32 %0, %1, %2;" : "=h"(lo) : "f"(x1), "f"(x0));
+  asm("cvt.rn.satfinite.e4m3x2.f32 %0, %1, %2;" : "=h"(hi) : "f"(x3), "f"(x2));
+  return (unsigned)lo | ((unsigned)hi << 16);
 }
 
 extern "C" __global__ void __launch_bounds__(256, 2)
@@ -520,7 +522,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   extern __shared__ __align__(128) unsigned char smem[];
   unsigned char* Ks = smem;
   unsigned char* Vs = smem + ST * TILE;
-  unsigned char* V16 = smem + 2 * ST * TILE;
+  unsigned char* Vt = smem + 2 * ST * TILE;
   const float NEG = __int_as_float(0xff800000);
   const int s = blockIdx.x, b = blockIdx.y;
   const int tid = threadIdx.x, warp = tid >> 5, lane = tid & 31;
@@ -587,21 +589,26 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   for (int i = 0; i < ntiles; ++i) {
     asm volatile("cp.async.wait_group 1;" ::);
     __syncthreads();
-    {  // V tile i: E4M3 -> FP16 (exact) into V16 [key][128 halves], 16-byte chunks swizzled by key & 7
-      const unsigned char* vsrc = Vs + (i % ST) * TILE + kl * KROW;
+    {  // V tile i -> V^T: task = 4 dims (dg) x 4 key slots (sg); slot 4t + 2a' + e of 32-key block <- key 8(2A + a') + 2t + e
+      const unsigned char* vsrc = Vs + (i % ST) * TILE;
 #pragma unroll
-      for (int c = c0; c < c0 + 2; ++c) {
-        uint4 w = *(const uint4*)(vsrc + ((c ^ (kl & 7)) * 16));
-        unsigned u[4] = {w.x, w.y, w.z, w.w};
-        unsigned h2[8];
+      for (int rep = 0; rep < 2; ++rep) {
+        const int combo = warp + 8 * rep;
+        const int dg = (lane & 7) + 8 * (combo & 3), sg = (lane >> 3) + 4 * (combo >> 2);
+        const int blk = sg >> 3, sl = sg & 7, tt = sl & 3, A = sl >> 2;
+        const int k0 = blk * 32 + 16 * A + 2 * tt;
+        const int kk[4] = {k0, k0 + 1, k0 + 8, k0 + 9};
+        unsigned w[4];
 #pragma unroll
-        for (int k = 0; k < 4; ++k) {
-          h2[2 * k] = e4m3x2_h2((unsigned short)(u[k] & 0xffff));
-          h2[2 * k + 1] = e4m3x2_h2((unsigned short)(u[k] >> 16));
-        }
-        unsigned char* vrow = V16 + kl * VROW;
-        *(uint4*)(vrow + (((2 * c) ^ (kl & 7)) * 16)) = make_uint4(h2[0], h2[1], h2[2], h2[3]);
-        *(uint4*)(vrow + (((2 * c + 1) ^ (kl & 7)) * 16)) = make_uint4(h2[4], h2[5], h2[6], h2[7]);
+        for (int r = 0; r < 4; ++r)
+          w[r] = *(const unsigned*)(vsrc + kk[r] * KROW + ((((dg >> 2) ^ (kk[r] & 7)) * 16) + (dg & 3) * 4));
+        const unsigned x = __byte_perm(w[0], w[1], 0x5140), y = __byte_perm(w[2], w[3], 0x5140);
+        const unsigned x2 = __byte_perm(w[0], w[1], 0x7362), y2 = __byte_perm(w[2], w[3], 0x7362);
+        unsigned char* dst = Vt + (dg * 4) * VT + blk * 32 + sl * 4;
+        *(unsigned*)(dst) = __byte_perm(x, y, 0x5410);
+        *(unsigned*)(dst + VT) = __byte_perm(x, y, 0x7632);
+        *(unsigned*)(dst + 2 * VT) = __byte_perm(x2, y2, 0x5410);
+        *(unsigned*)(dst + 3 * VT) = __byte_perm(x2, y2, 0x7632);
       }
     }
     issue(i + 2, nextrow);
@@ -625,58 +632,55 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
                      : "r"(qa[ks][0]), "r"(qa[ks][1]), "r"(qa[ks][2]), "r"(qa[ks][3]), "r"(b0), "r"(b1));
       }
     }
-    const int tb = lo + i * BN + t4 * 2;
+    const int base = lo + i * BN;
+    if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
+      const int tb = base + t4 * 2;
+#pragma unroll
+      for (int n = 0; n < 8; ++n) {
+#pragma unroll
+        for (int e = 0; e < 2; ++e) {
+          const int t = tb + n * 8 + e;
+          if (!(t < hi && t <= pos0)) sc[n][e] = NEG;
+          if (!(t < hi && t <= pos1)) sc[n][2 + e] = NEG;
+        }
+      }
+    }
     float mx0 = NEG, mx1 = NEG;
 #pragma unroll
     for (int n = 0; n < 8; ++n) {
-#pragma unroll
-      for (int e = 0; e < 2; ++e) {
-        const int t = tb + n * 8 + e;
-        const float v0 = (t < hi && t <= pos0) ? sc[n][e] * scale : NEG;
-        const float v1 = (t < hi && t <= pos1) ? sc[n][2 + e] * scale : NEG;
-        sc[n][e] = v0; sc[n][2 + e] = v1;
-        mx0 = fmaxf(mx0, v0); mx1 = fmaxf(mx1, v1);
-      }
+      mx0 = fmaxf(mx0, fmaxf(sc[n][0], sc[n][1])); mx1 = fmaxf(mx1, fmaxf(sc[n][2], sc[n][3]));
     }
     mx0 = fmaxf(mx0, __shfl_xor_sync(0xffffffff, mx0, 1)); mx0 = fmaxf(mx0, __shfl_xor_sync(0xffffffff, mx0, 2));
     mx1 = fmaxf(mx1, __shfl_xor_sync(0xffffffff, mx1, 1)); mx1 = fmaxf(mx1, __shfl_xor_sync(0xffffffff, mx1, 2));
-    const float mn0 = fmaxf(m0, mx0), mn1 = fmaxf(m1, mx1);
+    const float mn0 = fmaxf(m0, mx0 * scale), mn1 = fmaxf(m1, mx1 * scale);
     const float ms0 = mn0 == NEG ? 0.f : mn0, ms1 = mn1 == NEG ? 0.f : mn1;
     const float a0 = ex2(m0 - ms0), a1 = ex2(m1 - ms1);
+    const float nb0 = 8.f - ms0, nb1 = 8.f - ms1;  // p = 2^(s - m + 8) in (0, 256]
     float s0 = 0.f, s1 = 0.f;
 #pragma unroll
     for (int n = 0; n < 8; ++n) {
-      sc[n][0] = ex2(sc[n][0] - ms0); sc[n][1] = ex2(sc[n][1] - ms0);
-      sc[n][2] = ex2(sc[n][2] - ms1); sc[n][3] = ex2(sc[n][3] - ms1);
+      sc[n][0] = ex2(fmaf(sc[n][0], scale, nb0)); sc[n][1] = ex2(fmaf(sc[n][1], scale, nb0));
+      sc[n][2] = ex2(fmaf(sc[n][2], scale, nb1)); sc[n][3] = ex2(fmaf(sc[n][3], scale, nb1));
       s0 += sc[n][0] + sc[n][1]; s1 += sc[n][2] + sc[n][3];
       oacc[n][0] *= a0; oacc[n][1] *= a0; oacc[n][2] *= a1; oacc[n][3] *= a1;
     }
     l0 = l0 * a0 + s0; l1 = l1 * a1 + s1;
     m0 = mn0; m1 = mn1;
 #pragma unroll
-    for (int kk = 0; kk < 4; ++kk) {
-      const unsigned pa0 = pack_h2(sc[2 * kk][0], sc[2 * kk][1]);
-      const unsigned pa1 = pack_h2(sc[2 * kk][2], sc[2 * kk][3]);
-      const unsigned pa2 = pack_h2(sc[2 * kk + 1][0], sc[2 * kk + 1][1]);
-      const unsigned pa3 = pack_h2(sc[2 * kk + 1][2], sc[2 * kk + 1][3]);
+    for (int kb = 0; kb < 2; ++kb) {
+      const int n0 = kb * 4;
+      const unsigned pa0 = pack_e4(sc[n0][0], sc[n0][1], sc[n0 + 1][0], sc[n0 + 1][1]);
+      const unsigned pa1 = pack_e4(sc[n0][2], sc[n0][3], sc[n0 + 1][2], sc[n0 + 1][3]);
+      const unsigned pa2 = pack_e4(sc[n0 + 2][0], sc[n0 + 2][1], sc[n0 + 3][0], sc[n0 + 3][1]);
+      const unsigned pa3 = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
 #pragma unroll
-      for (int np = 0; np < 4; ++np) {
-        const int mi = lane >> 3, rr = lane & 7;
-        const int key = kk * 16 + (mi & 1) * 8 + rr;
-        const int chunkv = h * 8 + np * 2 + (mi >> 1);
-        const unsigned addr = smem_u32(V16 + key * VROW + ((chunkv ^ (key & 7)) * 16));
-        unsigned r0, r1, r2, r3;
-        asm volatile("ldmatrix.sync.aligned.m8n8.x4.trans.shared.b16 {%0,%1,%2,%3}, [%4];"
-                     : "=r"(r0), "=r"(r1), "=r"(r2), "=r"(r3) : "r"(addr));
-        asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
+      for (int np = 0; np < 8; ++np) {
+        const unsigned char* vr = Vt + (h * 64 + np * 8 + g) * VT + kb * 32 + t4 * 4;
+        const unsigned b0 = *(const unsigned*)vr, b1 = *(const unsigned*)(vr + 16);
+        asm volatile("mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
                      "{%0,%1,%2,%3};"
-                     : "+f"(oacc[2 * np][0]), "+f"(oacc[2 * np][1]), "+f"(oacc[2 * np][2]), "+f"(oacc[2 * np][3])
-                     : "r"(pa0), "r"(pa1), "r"(pa2), "r"(pa3), "r"(r0), "r"(r1));
-        asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
-                     "{%0,%1,%2,%3};"
-                     : "+f"(oacc[2 * np + 1][0]), "+f"(oacc[2 * np + 1][1]), "+f"(oacc[2 * np + 1][2]),
-                       "+f"(oacc[2 * np + 1][3])
-                     : "r"(pa0), "r"(pa1), "r"(pa2), "r"(pa3), "r"(r2), "r"(r3));
+                     : "+f"(oacc[np][0]), "+f"(oacc[np][1]), "+f"(oacc[np][2]), "+f"(oacc[np][3])
+                     : "r"(pa0), "r"(pa1), "r"(pa2), "r"(pa3), "r"(b0), "r"(b1));
       }
     }
   }
@@ -692,13 +696,13 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     *(float2*)(o_part + i1 * D + n * 8 + t4 * 2) = make_float2(oacc[n][2] * f1, oacc[n][3] * f1);
   }
   if (t4 == 0) {
-    lse_out[i0] = l0 > 0.f ? m0 + log2f(l0) : NEG;
-    lse_out[i1] = l1 > 0.f ? m1 + log2f(l1) : NEG;
+    lse_out[i0] = l0 > 0.f ? m0 + log2f(l0) - 8.f : NEG;
+    lse_out[i1] = l1 > 0.f ? m1 + log2f(l1) - 8.f : NEG;
   }
 }
 """
 FV_BN, FV_ST = 64, 3
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + FV_BN * 256  # K + V E4M3 stages, one FP16 V tile: 64 KB
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 128 * 68  # K + V E4M3 stages, one V^T tile (68-byte rows): 56.5 KB
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 

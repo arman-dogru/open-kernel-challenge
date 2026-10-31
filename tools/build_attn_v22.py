@@ -3,7 +3,7 @@
 v22 = v20b with full-attention verify (q_len 8) at batch >= 2 (tp8) on a hand-written CUDA sm_90a split-KV kernel
 (NVRTC in-process, cubin loaded from memory by CuPy, launched on torch's stream) instead of SGLang's FA3: those two
 loads are ~75% of their load's time (weight 16 x ~200 / ~385 us) and ran at 1.03 / 1.02x. Kernel: tools/attn_v22_fv.cu
-(FP8 mma.sync Q.K^T, online softmax in registers, FP16 mma.sync P.V from an exact E4M3 -> FP16 V tile, 3-stage
+(FP8 mma.sync Q.K^T and P.V (V transposed per tile in shared memory), online softmax in registers, 3-stage
 cp.async page-table gather); its partials go through the same Triton combine / RMSNorm x sigmoid(gate) as v20b.
 """
 import sys
@@ -23,7 +23,7 @@ def sub(old, new):
 FV = '''_FV_SRC = r"""
 ''' + cu + '''"""
 FV_BN, FV_ST = 64, 3
-FV_SMEM = 2 * FV_ST * FV_BN * 128 + FV_BN * 256  # K + V E4M3 stages, one FP16 V tile: 64 KB
+FV_SMEM = 2 * FV_ST * FV_BN * 128 + 128 * 68  # K + V E4M3 stages, one V^T tile (68-byte rows): 56.5 KB
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
 _FV = {}
 
@@ -96,7 +96,7 @@ sub('''    if path is None and q.device.type == "cpu":''', '''    if path is Non
         return _fv(data, q, qkv, cfg)  # v22: CUDA full-verify kernel instead of FA3
     if path is None and q.device.type == "cpu":''')
 sub('# okc: problem=muse_attention_decode\n"""v20:', '# okc: problem=muse_attention_decode\n'
-    '"""v22: v20b with full-attention verify at batch >= 2 on a CUDA sm_90a split-KV kernel (FP8 / FP16 mma.sync,\n'
+    '"""v22: v20b with full-attention verify at batch >= 2 on a CUDA sm_90a split-KV kernel (FP8 mma.sync,\n'
     'cp.async page-table gather) instead of FA3. See tools/build_attn_v22.py and tools/attn_v22_fv.cu.\n\nv20:')
 open(sys.argv[1] if len(sys.argv) > 1 else DST, "w").write(s)
 print("ok")
