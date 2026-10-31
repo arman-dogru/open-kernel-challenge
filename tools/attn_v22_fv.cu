@@ -45,6 +45,14 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
                  "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]),              \
                  "+f"(acc[7][2]), "+f"(acc[7][3])                                                                 \
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "l"(d), "n"(0), "r"(sc))
+#define WG_PV2(acc, a, b, d0, d1)                                                                           \
+  asm volatile("wgmma.fence.sync.aligned;\n"                                                                   \
+               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%32,%33,%34,%35}, %40, 1, 1, 1;\n" \
+               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%36,%37,%38,%39}, %41, 1, 1, 1;\n" \
+               "wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;"                             \
+               : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]), "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]), "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]), "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]), "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]), "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]), "+f"(acc[7][2]), "+f"(acc[7][3])                                                                         \
+               : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),         \
+                 "l"(d0), "l"(d1) : "memory")
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;" ::: "memory"); }
 __device__ __forceinline__ void wg_commit_wait() {
   asm volatile("wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;" ::: "memory");
@@ -82,18 +90,10 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   const int pos0 = seq + j0, pos1 = seq + j1;
   const int head = h * G + g;
 
-  unsigned qa[2][4];
-  {
-    const unsigned char* q0 = q + (long long)(b * LQ + j0) * stride_qt + head * D;
-    const unsigned char* q1 = q + (long long)(b * LQ + j1) * stride_qt + head * D;
-#pragma unroll
-    for (int ks = 0; ks < 2; ++ks) {
-      qa[ks][0] = *(const unsigned*)(q0 + ks * 32 + t4 * 4);
-      qa[ks][1] = *(const unsigned*)(q1 + ks * 32 + t4 * 4);
-      qa[ks][2] = *(const unsigned*)(q0 + ks * 32 + 16 + t4 * 4);
-      qa[ks][3] = *(const unsigned*)(q1 + ks * 32 + 16 + t4 * 4);
-    }
-  }
+  // Q fragments (wgmma A, row g / g + 8 = tokens j0 / j1): re-read every tile with volatile loads (L1 hits). Kept in
+  // registers across the loop, ptxas (CUDA 13 NVRTC) reused them as scratch after the first tile's QGMMA (SASS).
+  const unsigned char* q0 = q + (long long)(b * LQ + j0) * stride_qt + head * D + t4 * 4;
+  const unsigned char* q1 = q + (long long)(b * LQ + j1) * stride_qt + head * D + t4 * 4;
   const float scale = qk_scale * ksp[0] * 1.4426950408889634f;
   const float vsc = vsp[0];
 
@@ -161,14 +161,22 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     }
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // cp.async / st.shared -> wgmma (async proxy)
     __syncthreads();
+    unsigned qt[2][4];
+#pragma unroll
+    for (int ks = 0; ks < 2; ++ks) {
+      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][0]) : "l"(q0 + ks * 32));
+      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][1]) : "l"(q1 + ks * 32));
+      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][2]) : "l"(q0 + ks * 32 + 16));
+      asm volatile("ld.global.nc.b32 %0, [%1];" : "=r"(qt[ks][3]) : "l"(q1 + ks * 32 + 16));
+    }
     issue(i + 2, nextrow);
     nextrow = rowof(i + 3);
 
     const unsigned kt = smem_u32(Ks + (i % ST) * TILE) + h * 64;
     float sc[8][4] = {};
     wg_fence();
-    WG_QK(sc, qa[0], desc(kt, 1024, 1), 0);
-    WG_QK(sc, qa[1], desc(kt + 32, 1024, 1), 1);
+    WG_QK(sc, qt[0], desc(kt, 1024, 1), 0);
+    WG_QK(sc, qt[1], desc(kt + 32, 1024, 1), 1);
     wg_commit_wait();
     const int base = lo + i * BN;
     if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
@@ -214,10 +222,9 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
       pa[kb][3] = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
     }
     const unsigned vt = smem_u32(Vt + h * VTH);
-    wg_fence();  // after the P fragments and the O rescale are in registers
-    WG_QK(oacc, pa[0], desc(vt, 1024, 1), 1);
-    WG_QK(oacc, pa[1], desc(vt + 32, 1024, 1), 1);
-    wg_commit_wait();
+    // fence, both k-steps, commit and wait in one asm: the P fragments and the rescaled O are inputs, so the
+    // fence cannot be scheduled ahead of their producers
+    WG_PV2(oacc, pa[0], pa[1], desc(vt, 1024, 1), desc(vt + 32, 1024, 1));
   }
   asm volatile("cp.async.wait_group 0;" ::);
   l0 += __shfl_xor_sync(0xffffffff, l0, 1); l0 += __shfl_xor_sync(0xffffffff, l0, 2);
