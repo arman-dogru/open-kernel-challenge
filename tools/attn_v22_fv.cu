@@ -15,7 +15,7 @@
 #define G 8
 #define LQ 8
 #define BN 64
-#define ST 4  // cp.async stages (power of two): ST - 1 tiles (16 KB each) in flight per CTA
+#define ST 3  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
 #define QH 8192  // Q bytes per KV head in shared memory: 64 rows x 128 B (64 used), 128-byte swizzle
 #define KROW 128
 #define VTH 8192  // V^T bytes per head: 64 dims x 128-byte rows (64 key slots used), 128-byte swizzle
@@ -50,7 +50,7 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
   asm volatile("wgmma.fence.sync.aligned;\n"                                                                   \
                "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%32,%33,%34,%35}, %40, 1, 1, 1;\n" \
                "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%36,%37,%38,%39}, %41, 1, 1, 1;\n" \
-               "wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;"                             \
+               "wgmma.commit_group.sync.aligned;"                                                                 \
                : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]), "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]), "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]), "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]), "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]), "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]), "+f"(acc[7][2]), "+f"(acc[7][3])                                                                         \
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),         \
                  "l"(d0), "l"(d1) : "memory")
@@ -66,6 +66,8 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
                  "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]),              \
                  "+f"(acc[7][2]), "+f"(acc[7][3])                                                                 \
                : "l"(da), "l"(db), "r"(sc))
+#define WG_WAIT_SO(sacc, oacc)                                                                              \
+  asm volatile("wgmma.wait_group.sync.aligned 0;" : "+f"(sacc[0][0]), "+f"(sacc[0][1]), "+f"(sacc[0][2]), "+f"(sacc[0][3]), "+f"(sacc[1][0]), "+f"(sacc[1][1]), "+f"(sacc[1][2]), "+f"(sacc[1][3]), "+f"(sacc[2][0]), "+f"(sacc[2][1]), "+f"(sacc[2][2]), "+f"(sacc[2][3]), "+f"(sacc[3][0]), "+f"(sacc[3][1]), "+f"(sacc[3][2]), "+f"(sacc[3][3]), "+f"(sacc[4][0]), "+f"(sacc[4][1]), "+f"(sacc[4][2]), "+f"(sacc[4][3]), "+f"(sacc[5][0]), "+f"(sacc[5][1]), "+f"(sacc[5][2]), "+f"(sacc[5][3]), "+f"(sacc[6][0]), "+f"(sacc[6][1]), "+f"(sacc[6][2]), "+f"(sacc[6][3]), "+f"(sacc[7][0]), "+f"(sacc[7][1]), "+f"(sacc[7][2]), "+f"(sacc[7][3]), "+f"(oacc[0][0]), "+f"(oacc[0][1]), "+f"(oacc[0][2]), "+f"(oacc[0][3]), "+f"(oacc[1][0]), "+f"(oacc[1][1]), "+f"(oacc[1][2]), "+f"(oacc[1][3]), "+f"(oacc[2][0]), "+f"(oacc[2][1]), "+f"(oacc[2][2]), "+f"(oacc[2][3]), "+f"(oacc[3][0]), "+f"(oacc[3][1]), "+f"(oacc[3][2]), "+f"(oacc[3][3]), "+f"(oacc[4][0]), "+f"(oacc[4][1]), "+f"(oacc[4][2]), "+f"(oacc[4][3]), "+f"(oacc[5][0]), "+f"(oacc[5][1]), "+f"(oacc[5][2]), "+f"(oacc[5][3]), "+f"(oacc[6][0]), "+f"(oacc[6][1]), "+f"(oacc[6][2]), "+f"(oacc[6][3]), "+f"(oacc[7][0]), "+f"(oacc[7][1]), "+f"(oacc[7][2]), "+f"(oacc[7][3]) :: "memory")
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;" ::: "memory"); }
 __device__ __forceinline__ void wg_commit_wait() {
   asm volatile("wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;" ::: "memory");
@@ -89,7 +91,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   unsigned char* Ks = smem;
   unsigned char* Vs = smem + ST * TILE;
   unsigned char* Vt = smem + 2 * ST * TILE;
-  unsigned char* Qs = Vt + 2 * VTH;
+  unsigned char* Qs = Vt + 4 * VTH;  // V^T is double-buffered (P.V of tile i runs into tile i + 1)
   const float NEG = __int_as_float(0xff800000);
   const int s = blockIdx.x, b = blockIdx.y;
   const int tid = threadIdx.x, warp = tid >> 5, lane = tid & 31;
@@ -175,7 +177,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 #pragma unroll
         for (int r = 0; r < 4; ++r) {  // row = head * 64 + d; 128-byte rows, 16-byte chunk ^= row & 7
           const int row = dg * 4 + r;
-          *(unsigned*)(Vt + row * 128 + (((slot >> 4) ^ (row & 7)) << 4) + (slot & 15)) = o4[r];
+          *(unsigned*)(Vt + (i & 1) * 2 * VTH + row * 128 + (((slot >> 4) ^ (row & 7)) << 4) + (slot & 15)) = o4[r];
         }
       }
     }
@@ -190,7 +192,8 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     const unsigned qs = smem_u32(Qs + h * QH);
     WG_QK_SS(sc, desc(qs, 1024, 1), desc(kt, 1024, 1), 0);
     WG_QK_SS(sc, desc(qs + 32, 1024, 1), desc(kt + 32, 1024, 1), 1);
-    wg_commit_wait();
+    asm volatile("wgmma.commit_group.sync.aligned;" ::: "memory");
+    WG_WAIT_SO(sc, oacc);  // S(i) and the previous tile's P.V (overlapped with this tile's barrier/transpose/QK)
     const int base = lo + i * BN;
     if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
       const int tb = base + t4 * 2;
@@ -234,10 +237,14 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
       pa[kb][2] = pack_e4(sc[n0 + 2][0], sc[n0 + 2][1], sc[n0 + 3][0], sc[n0 + 3][1]);
       pa[kb][3] = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
     }
-    const unsigned vt = smem_u32(Vt + h * VTH);
+    const unsigned vt = smem_u32(Vt + (i & 1) * 2 * VTH + h * VTH);
     // fence, both k-steps, commit and wait in one asm: the P fragments and the rescaled O are inputs, so the
     // fence cannot be scheduled ahead of their producers
     WG_PV2(oacc, pa[0], pa[1], desc(vt, 1024, 1), desc(vt + 32, 1024, 1));
+  }
+  {
+    float dummy[8][4] = {};
+    WG_WAIT_SO(dummy, oacc);  // last tile's P.V
   }
   asm volatile("cp.async.wait_group 0;" ::);
   l0 += __shfl_xor_sync(0xffffffff, l0, 1); l0 += __shfl_xor_sync(0xffffffff, l0, 2);
