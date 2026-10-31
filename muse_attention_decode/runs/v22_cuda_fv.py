@@ -477,17 +477,20 @@ def _fa3(data, q, qkv, cfg):
 
 _FV_SRC = r"""
 // Full-attention verify (q_len 8) split-KV partials for tp8 (16 query / 2 KV heads, D 64), attention v22.
-// One CTA per (split s, request b), 8 warps: warps 0-3 serve KV head 0, 4-7 KV head 1; each warp owns 16 rows
-// (row r = token * 8 + query head within the group, as the Triton head kernel). K/V rows (both heads, 128 B per
-// key) are gathered through the page table by an ST-stage cp.async pipeline of 64-key tiles (16-byte chunks
-// XOR-swizzled by key & 7), page indices loaded one tile ahead. S = Q.K^T on FP8 mma.sync m16n8k32 (queries
-// already E4M3, as FA3's FP8 path) on wgmma m64n64k32 (one warpgroup per KV head: its 64 rows = 8 query heads x 8
-// tokens; A = Q fragments from registers, B = the K tile through a 128-byte-swizzle descriptor), online softmax in
-// registers (exp2 domain), P . V also on FP8 wgmma (A = P from registers, B = V^T in 128-byte-swizzle rows): P (scaled by 2^8 into E4M3's range) is packed straight from the S accumulators, and V is transposed per
-// tile into V^T [head * 64 + d][key slot] with key slots permuted to match the S accumulator layout (4x4 byte
-// transposes by prmt), so a B fragment is one 32-bit shared load. Output: per row
-// the partial o = acc * v_scale / l and lse = m + log2(l) in the Triton head kernel's layout, so the same
-// combine/norm/gate kernel merges them.
+// One CTA per (split s, request b), 256 threads = 2 warpgroups, one per KV head (warps 0-3: head 0, 4-7: head 1).
+// A warpgroup's 64 accumulator rows are its 8 query heads x 8 tokens: warp wi's rows wi*16 + g and + 8 are tokens
+// 2wi and 2wi + 1, query head h*8 + g. K/V rows (both heads, 128 B per key) are gathered through the page table by
+// an ST-stage cp.async pipeline of 64-key tiles (16-byte chunks XOR-swizzled by key & 7, the 128-byte swizzle),
+// page indices loaded one tile ahead.
+// S = Q.K^T: FP8 wgmma m64n64k32, SS: Q (already E4M3, as FA3's FP8 path) is staged once in shared memory and
+//   both operands go by 128-byte-swizzle descriptors (a register A operand was reused as scratch by ptxas).
+// Online softmax in registers (exp2 domain); O is rescaled only when a row max moved.
+// P.V: FP8 wgmma m64n72k32, RS: P (scaled by 2^8 into E4M3's range) is packed straight from the S accumulators;
+//   V is transposed per tile into a double-buffered V^T [head * 72 + d][key slot] (key slots permuted to match the
+//   S accumulator layout, 4x4 byte transposes by prmt). V^T rows 64..71 are E4M3 ones, so accumulator columns
+//   64..71 are the softmax row sums. Tile i's P.V overlaps tile i + 1's barrier, transpose and QK.
+// Output per row: the partial o = acc * v_scale / l and lse = m + log2(l) in the Triton head kernel's layout, so
+// the same combine/norm/gate kernel merges them.
 #define D 64
 #define HKV 2
 #define G 8
@@ -511,19 +514,6 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
   return (unsigned long long)((addr & 0x3FFFF) >> 4) | (1ull << 16) | ((unsigned long long)(sbo >> 4) << 32) |
          ((unsigned long long)mode << 62);
 }
-#define WG_QK(acc, a, d, sc)                                                                                        \
-  asm volatile("{ .reg .pred p; setp.ne.b32 p, %38, 0;\n"                                                         \
-               "wgmma.mma_async.sync.aligned.m64n64k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13," \
-               "%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31}, {%32,%33,%34,%35}, %36, "   \
-               "p, 1, 1; }"                                                                                         \
-               : "+f"(acc[0][0]), "+f"(acc[0][1]), "+f"(acc[0][2]), "+f"(acc[0][3]), "+f"(acc[1][0]),              \
-                 "+f"(acc[1][1]), "+f"(acc[1][2]), "+f"(acc[1][3]), "+f"(acc[2][0]), "+f"(acc[2][1]),              \
-                 "+f"(acc[2][2]), "+f"(acc[2][3]), "+f"(acc[3][0]), "+f"(acc[3][1]), "+f"(acc[3][2]),              \
-                 "+f"(acc[3][3]), "+f"(acc[4][0]), "+f"(acc[4][1]), "+f"(acc[4][2]), "+f"(acc[4][3]),              \
-                 "+f"(acc[5][0]), "+f"(acc[5][1]), "+f"(acc[5][2]), "+f"(acc[5][3]), "+f"(acc[6][0]),              \
-                 "+f"(acc[6][1]), "+f"(acc[6][2]), "+f"(acc[6][3]), "+f"(acc[7][0]), "+f"(acc[7][1]),              \
-                 "+f"(acc[7][2]), "+f"(acc[7][3])                                                                 \
-               : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "l"(d), "n"(0), "r"(sc))
 #define WG_PV2(acc, a, b, d0, d1)                                                                           \
   asm volatile("wgmma.fence.sync.aligned;\n"                                                                   \
                "wgmma.mma_async.sync.aligned.m64n72k32.f32.e4m3.e4m3 {%0,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22,%23,%24,%25,%26,%27,%28,%29,%30,%31,%32,%33,%34,%35}, {%36,%37,%38,%39}, %44, 1, 1, 1;\n" \
@@ -547,9 +537,6 @@ __device__ __forceinline__ unsigned long long desc(unsigned addr, unsigned sbo, 
 #define WG_WAIT_SO(sacc, oacc)                                                                              \
   asm volatile("wgmma.wait_group.sync.aligned 0;" : "+f"(sacc[0][0]), "+f"(sacc[0][1]), "+f"(sacc[0][2]), "+f"(sacc[0][3]), "+f"(sacc[1][0]), "+f"(sacc[1][1]), "+f"(sacc[1][2]), "+f"(sacc[1][3]), "+f"(sacc[2][0]), "+f"(sacc[2][1]), "+f"(sacc[2][2]), "+f"(sacc[2][3]), "+f"(sacc[3][0]), "+f"(sacc[3][1]), "+f"(sacc[3][2]), "+f"(sacc[3][3]), "+f"(sacc[4][0]), "+f"(sacc[4][1]), "+f"(sacc[4][2]), "+f"(sacc[4][3]), "+f"(sacc[5][0]), "+f"(sacc[5][1]), "+f"(sacc[5][2]), "+f"(sacc[5][3]), "+f"(sacc[6][0]), "+f"(sacc[6][1]), "+f"(sacc[6][2]), "+f"(sacc[6][3]), "+f"(sacc[7][0]), "+f"(sacc[7][1]), "+f"(sacc[7][2]), "+f"(sacc[7][3]), "+f"(oacc[0][0]), "+f"(oacc[0][1]), "+f"(oacc[0][2]), "+f"(oacc[0][3]), "+f"(oacc[1][0]), "+f"(oacc[1][1]), "+f"(oacc[1][2]), "+f"(oacc[1][3]), "+f"(oacc[2][0]), "+f"(oacc[2][1]), "+f"(oacc[2][2]), "+f"(oacc[2][3]), "+f"(oacc[3][0]), "+f"(oacc[3][1]), "+f"(oacc[3][2]), "+f"(oacc[3][3]), "+f"(oacc[4][0]), "+f"(oacc[4][1]), "+f"(oacc[4][2]), "+f"(oacc[4][3]), "+f"(oacc[5][0]), "+f"(oacc[5][1]), "+f"(oacc[5][2]), "+f"(oacc[5][3]), "+f"(oacc[6][0]), "+f"(oacc[6][1]), "+f"(oacc[6][2]), "+f"(oacc[6][3]), "+f"(oacc[7][0]), "+f"(oacc[7][1]), "+f"(oacc[7][2]), "+f"(oacc[7][3]), "+f"(oacc[8][0]), "+f"(oacc[8][1]), "+f"(oacc[8][2]), "+f"(oacc[8][3]) :: "memory")
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;" ::: "memory"); }
-__device__ __forceinline__ void wg_commit_wait() {
-  asm volatile("wgmma.commit_group.sync.aligned;\nwgmma.wait_group.sync.aligned 0;" ::: "memory");
-}
 __device__ __forceinline__ float ex2(float x) { float y; asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x)); return y; }
 __device__ __forceinline__ unsigned pack_e4(float x0, float x1, float x2, float x3) {  // bytes x0 (low) .. x3
   unsigned short lo, hi;
@@ -748,13 +735,12 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 FV_BN, FV_ST = 64, 3  # must match BN / ST in tools/attn_v22_fv.cu
 FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)
-_FV = {}
+_FV = {}  # "cubin": NVRTC output (device-independent); device index -> (module, function); "sm90": index -> bool
 
 
-def _fv_fn():
-    """NVRTC (cuda.bindings, in-process) -> sm_90a cubin -> CuPy, loaded from memory (no files)."""
-    if "f" not in _FV:
-        import cupy as cp
+def _fv_cubin():
+    """NVRTC (cuda.bindings, in-process) -> sm_90a cubin bytes (no files). Host-only, no CUDA calls."""
+    if "cubin" not in _FV:
         from cuda.bindings import nvrtc
         err, prog = nvrtc.nvrtcCreateProgram(_FV_SRC.encode(), b"attn_fv.cu", 0, [], [])
         assert err == nvrtc.nvrtcResult.NVRTC_SUCCESS, err
@@ -768,17 +754,43 @@ def _fv_fn():
         _, size = nvrtc.nvrtcGetCUBINSize(prog)
         cubin = b" " * size
         nvrtc.nvrtcGetCUBIN(prog, cubin)
-        mod = cp.cuda.function.Module()
-        mod.load(cubin)
-        f = mod.get_function("attn_fv")
-        drv = cp.cuda.driver
-        drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), FV_SMEM)
-        _FV["m"], _FV["f"] = mod, f
-    return _FV["f"]
+        _FV["cubin"] = cubin
+    return _FV["cubin"]
+
+
+def _fv_fn(dev):
+    """The kernel loaded on CUDA device dev by CuPy from memory. Loaded at import (below) for the current device,
+    so the NVRTC compile and module load never run inside the judge's CUDA-graph capture."""
+    if dev not in _FV:
+        if torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("attn_fv: kernel not loaded before CUDA-graph capture (device %d)" % dev)
+        import cupy as cp
+        cubin = _fv_cubin()
+        with cp.cuda.Device(dev):
+            mod = cp.cuda.function.Module()
+            mod.load(cubin)
+            f = mod.get_function("attn_fv")
+            drv = cp.cuda.driver
+            drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), FV_SMEM)
+        _FV[dev] = (mod, f)
+    return _FV[dev][1]
+
+
+def _fv_sm90(device):
+    """True on an sm_90 (H100 / H200) device: the cubin is sm_90a only."""
+    key = ("sm90", device.index)
+    if key not in _FV:
+        _FV[key] = torch.cuda.get_device_capability(device) == (9, 0)
+    return _FV[key]
+
+
+if torch.cuda.is_available() and torch.cuda.get_device_capability() == (9, 0):
+    _fv_fn(torch.cuda.current_device())  # compile + load at import (review #20 m3), not on the first call
 
 
 def _fv_ok(kind, L, batch, hq, hkv, d, q):
-    return kind == "full" and L == 8 and batch >= 2 and (hq, hkv, d) == (16, 2, 64) and q.device.type == "cuda"
+    return (kind == "full" and L == 8 and batch >= 2 and (hq, hkv, d) == (16, 2, 64) and q.device.type == "cuda"
+            and _fv_sm90(q.device))
 
 
 def _fv_page_ok(page):
@@ -801,8 +813,9 @@ def _fv(data, q, qkv, cfg):
     pt, sl = data["page_table"], data["cache_seqlens"]
     assert pt.dtype == torch.int32 and sl.dtype == torch.int32 and q.is_contiguous()
     kc, vc = data["k_cache"].view(torch.uint8), data["v_cache"].view(torch.uint8)
-    f = _fv_fn()
-    with cp.cuda.ExternalStream(torch.cuda.current_stream().cuda_stream):
+    dev = q.device.index if q.device.index is not None else torch.cuda.current_device()
+    f = _fv_fn(dev)
+    with cp.cuda.Device(dev), cp.cuda.ExternalStream(torch.cuda.current_stream(q.device).cuda_stream):
         f((nsplit, batch), (256,), (
             np.uint64(q.data_ptr()), np.int32(q.stride(0)), np.uint64(kc.data_ptr()), np.uint64(vc.data_ptr()),
             np.uint64(pt.data_ptr()), np.int32(pt.stride(0)), np.uint64(sl.data_ptr()),

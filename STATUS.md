@@ -22,6 +22,48 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Oct 31 ~6:00-7:00 PM ET: attention v22 (PR #20), review r1 fixes (CHANGES REQUESTED by Senior Larper)
+
+What v22 really gained (review m1). Check b9586ff0a9db47f0 scored **1.433x (95% CI 1.412-1.460)** against v20b's
+1.406x, but:
+- **The kernel alone is about +0.7%** (review r1's estimate): the two full-verify b >= 2 shapes the CUDA kernel
+  replaces move the overall 1.4057 -> 1.4154 when the other shapes are held at v20b's times.
+- **Most of 1.433 is noise**: shapes v22 does not touch (dp heads, b1, sliding, decode; byte-identical v20b code)
+  ran 0.7-3.9% faster in that run than in v20b's check.
+- **Selection**: b9586ff0 was the best of 8 scored v22 runs (12 v22-series checks in all; the records section,
+  pending OKC_TOKEN, lists each one's outcome). Its CI lower bound clears the board's CI upper bound 1.409 by only ~0.0028.
+- So a re-check of v22 may well land near ~1.41-1.42x (an estimate from the kernel-only figure), i.e. not clearly
+  above 1.409.
+
+Review fixes (branch attn-v22, after merging origin/main a1860cc):
+- m3: NVRTC compile + CuPy module load moved out of the first kernel_fn call. `_fv_cubin()` (host-only NVRTC) and
+  `_fv_fn(dev)` (per-device load) run at import when an sm_90 GPU is present; `_fv_fn` raises instead of compiling
+  if it is ever reached while a stream is capturing. `_fv_ok` also requires an sm_90 device (the cubin is sm_90a only).
+- Nit: launches run under `cp.cuda.Device(q's device)` on that device's current torch stream (device guard).
+- Nits: tools/attn_v22_fv.cu header rewritten to the shipped design (SS QK wgmma with Q in shared memory, n72 P.V with
+  ones rows for the row sums, overlap); dead `WG_QK` macro and unused `wg_commit_wait` removed. The cubin is unchanged
+  (byte-identical under NVRTC 13.4).
+- Register figure is NVRTC-version dependent (nit): `tools/tests/attn_v22_nvrtc_cc.py`, sm_90a, `-std=c++17`:
+  **NVRTC 12.9 (nvidia-cuda-nvrtc-cu12 12.9.86): 106 regs, 0 spill, 0 stack; NVRTC 13.4 (nvidia-cuda-nvrtc 13.4.92):
+  104 regs, 0 spill, 0 stack.** The PR's "106 regs" matches 12.9. The judge's NVRTC version is not recorded.
+- m2: `tools/tests/attn_v22_fv_kvscale.py`: full verify q_len 8, tp8, b 2-4, kv_scale 0.015625 / 0.37 / 2.5 and
+  v_scale overrides 0.05 / 0.6 (K and V scales differ). Part A (CPU) emulates the kernel's tile loop step by step
+  (mask, exp2 online softmax with the +8 bias, P rounded to E4M3, ones-row sums, v_scale / l, lse - 8) and feeds the
+  submission's own Triton combine: 4/4 pass (rel. L2 0.069-0.079 vs bounds 0.150; the reference's own FP8-query
+  error is 0.069-0.079). Negative control: dropping k_scale fails all 4 (0.31-0.52). A uniform v_scale error cancels
+  in the per-head RMSNorm, so v_scale is only checked structurally. Part B (`ATTN_GPU=1`, sm_90 only) runs the real
+  CUDA path, asserts it was taken, and replays it in a CUDA graph; it has NOT run yet (no H100/H200 off the judge).
+- Nit: `/tmp/attn_cmp19.py` replaced by `tools/tests/attn_cpu_cmp.py`: v20b vs v22 CPU outputs and new cache rows
+  byte-identical on 9 cases (maxdiff 0).
+- CPU interpreter localtest (`tools/localtest_attn.py` on v22): every case fails only the new-cache 8% check, identically
+  for the old (8ee72590) and new builds: the Triton 3.9 interpreter's fp32 -> E4M3 cast bug (r6 n2 caveat above), not v22.
+- Offline Triton sm_90 harness (`SM90_GPU_TYPES=1 tools/tests/triton_sm90_compile.py runs/v22_cuda_fv.py`, run from
+  muse_attention_decode/): 0 compile failures.
+
+Submit file: muse_attention_decode/runs/v22_cuda_fv.py rebuilt by tools/build_attn_v22.py, **sha256 d2925cb84321faeac15c47620687cb9059559445fa92c72dffcfe616d5b89d60**
+(was 8ee72590baa893fc..., the file checked as b9586ff0). The kernel code is unchanged but the bytes changed, so a
+new check is needed before any submit (not sent: no OKC_TOKEN on the box after the Oct 31 box move).
+
 ## Oct 29 ~3:40-3:45 PM ET: prefill v2b and decode v19 submitted (review round 13 approvals of #16 / #17)
 - prefill_layer v2b_dequant_grouped.py (sha d0b2cc11..., sent at 99e0c27): submit 7b69b2fcfffb40dd, **1.088x (1.072-1.105)**,
   5/5 tests. First prefill board entry. Per TASK.md, prefill has its own board and does not count toward the overall rank.
