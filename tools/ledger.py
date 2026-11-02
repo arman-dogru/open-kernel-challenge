@@ -18,9 +18,9 @@ with open("sends.tsv") as f:
             else:
                 res = f"status={s.get('status')} error={str(s.get('error'))[:60]}"
         rows.append((r["time_et"], r["job_id"], r["problem"], r["kind"], r["file"].split("/")[-1],
-                     r["sha256"][:16], r["git_commit"], res))
-table = [HEAD, "", "| time | job | problem | kind | file | sha256[:16] (at send) | commit | judge |",
-         "|---|---|---|---|---|---|---|---|"] + ["| " + " | ".join(x) + " |" for x in rows]
+                     r["sha256"][:16], r["git_commit"], res, (r.get("notes") or "").replace("|", "/")))
+table = [HEAD, "", "| time | job | problem | kind | file | sha256[:16] (at send) | commit | judge | notes |",
+         "|---|---|---|---|---|---|---|---|---|"] + ["| " + " | ".join(x) + " |" for x in rows]
 s = open("STATUS.md").read()
 if HEAD in s:
     a = s.index(HEAD)
