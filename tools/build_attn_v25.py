@@ -17,7 +17,7 @@ s = open(SRC).read()
 cu = open("tools/attn_v25_fv.cu").read()
 assert '"""' not in cu and cu.count('"memory"') >= 16
 DIAG = sys.argv[1] == "--diag"
-cfg = {"fv_st": 3, "fv_occ": 4, "rows": [128, 4, 3, 4, True]}
+cfg = {"fv_st": 3, "fv_occ": 4, "fv_vt1": 0, "rows": [128, 4, 3, 4, True]}
 if DIAG:
     name = sys.argv[2] if len(sys.argv) > 2 else "v25d_bench"
 else:
@@ -39,44 +39,49 @@ FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)''',
         f'''FV_BN = 64  # must match BN in tools/attn_v25_fv.cu
 FV_ST = {cfg["fv_st"]}  # cp.async stages (-DST; 3 = v24)
+FV_VT1 = {cfg["fv_vt1"]}  # 1: single V^T buffer (-DVT1; 0 = v24)
 FV_OCC = {cfg["fv_occ"]}  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM at ST 3; the rest is load balance)
 ROWS_FULL = ("rows", {cfg["rows"][0]}, {cfg["rows"][1]}, {cfg["rows"][2]}, {cfg["rows"][3]}, {cfg["rows"][4]})  # full decode, batch >= 2
 
 
-def _fv_smem(st):
-    return 2 * st * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
+def _fv_smem(st, vt1=None):
+    vt1 = FV_VT1 if vt1 is None else vt1
+    return 2 * st * FV_BN * 128 + (1 if vt1 else 2) * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
 
 
 FV_SMEM = _fv_smem(FV_ST)''')
 
 s = rep(s, '''def _fv_cubin():
     """NVRTC (cuda.bindings, in-process) -> sm_90a cubin bytes (no files). Host-only, no CUDA calls."""
-    if "cubin" not in _FV:''', '''def _fv_cubin(st=None):
+    if "cubin" not in _FV:''', '''def _fv_cubin(st=None, vt1=None):
     """NVRTC (cuda.bindings, in-process) -> sm_90a cubin bytes (no files). Host-only, no CUDA calls."""
     st = FV_ST if st is None else st
-    if ("cubin", st) not in _FV:''')
-s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()]''')
+    vt1 = FV_VT1 if vt1 is None else vt1
+    if ("cubin", st, vt1) not in _FV:''')
+s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 else [])''')
 s = rep(s, '''        _FV["cubin"] = cubin
-    return _FV["cubin"]''', '''        _FV[("cubin", st)] = cubin
-    return _FV[("cubin", st)]''')
-s = rep(s, '''def _fv_fn(dev):''', '''def _fv_fn(dev, st=None):''')
+    return _FV["cubin"]''', '''        _FV[("cubin", st, vt1)] = cubin
+    return _FV[("cubin", st, vt1)]''')
+s = rep(s, '''def _fv_fn(dev):''', '''def _fv_fn(dev, st=None, vt1=None):''')
 s = rep(s, '''    if dev not in _FV:
         if torch.cuda.is_current_stream_capturing():''', '''    st = FV_ST if st is None else st
-    if (dev, st) not in _FV:
+    vt1 = FV_VT1 if vt1 is None else vt1
+    if (dev, st, vt1) not in _FV:
         if torch.cuda.is_current_stream_capturing():''')
-s = rep(s, '''        cubin = _fv_cubin()''', '''        cubin = _fv_cubin(st)''')
+s = rep(s, '''        cubin = _fv_cubin()''', '''        cubin = _fv_cubin(st, vt1)''')
 s = rep(s, '''            drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), FV_SMEM)
         _FV[dev] = (mod, f)
-    return _FV[dev][1]''', '''            drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), _fv_smem(st))
-        _FV[(dev, st)] = (mod, f)
-    return _FV[(dev, st)][1]''')
-s = rep(s, '''def _fv(data, q, qkv, cfg):''', '''def _fv(data, q, qkv, cfg, st=None, occ=None):''')
+    return _FV[dev][1]''', '''            drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), _fv_smem(st, vt1))
+        _FV[(dev, st, vt1)] = (mod, f)
+    return _FV[(dev, st, vt1)][1]''')
+s = rep(s, '''def _fv(data, q, qkv, cfg):''', '''def _fv(data, q, qkv, cfg, st=None, occ=None, vt1=None):''')
 s = rep(s, '''    nsplit = _nsplit(cfg, batch, 1, capacity, FV_OCC)''', '''    st = FV_ST if st is None else st
+    vt1 = FV_VT1 if vt1 is None else vt1
     nsplit = _nsplit(cfg, batch, 1, capacity, FV_OCC if occ is None else occ)''')
 s = rep(s, '''    f = _fv_fn(dev)
-    with''', '''    f = _fv_fn(dev, st)
+    with''', '''    f = _fv_fn(dev, st, vt1)
     with''')
-s = rep(s, '''            np.int32(hq)), shared_mem=FV_SMEM)''', '''            np.int32(hq)), shared_mem=_fv_smem(st))''')
+s = rep(s, '''            np.int32(hq)), shared_mem=FV_SMEM)''', '''            np.int32(hq)), shared_mem=_fv_smem(st, vt1))''')
 s = rep(s, '''    return ("rows", 128, 4, 3, 4, True)  # v24: ~4 programs/SM (was 16); 128-key tiles + PREF (= hoist), v20 / v17''',
         '''    return ROWS_FULL  # v24: ("rows", 128, 4, 3, 4, True): ~4 programs/SM, 128-key tiles + PREF (= hoist); v25 config''')
 # kernel_fn: allow a path override (diagnostic sweeps call _kernel_path directly)
@@ -94,7 +99,7 @@ s = rep(s, '''    path = _attn_path(kind, L, batch, hkv, d)
 head = ('''# okc: problem=muse_attention_decode
 """''' + name + ''': v24 + attention v25 source (tools/build_attn_v25.py): the full-verify kernel from tools/attn_v25_fv.cu
 (v24's + the "memory" clobber on the V transpose's inline ld/st.shared, review r17 m1; ST at compile time), FV ST
-''' + str(cfg["fv_st"]) + ''', FV splits/SM ''' + str(cfg["fv_occ"]) + ''', full decode batch >= 2 rows config ''' + str(tuple(cfg["rows"])) + '''.
+''' + str(cfg["fv_st"]) + ''', VT1 ''' + str(cfg["fv_vt1"]) + ''', FV splits/SM ''' + str(cfg["fv_occ"]) + ''', full decode batch >= 2 rows config ''' + str(tuple(cfg["rows"])) + '''.
 ''' + ('''v25d (DIAGNOSTIC): kernel_fn is v24's; at import (GPU present) an untimed sweep of full verify (b 16/32) and full
 decode (b 16/32) variants on synthetic agentic inputs (ctx 80000, page 1, scattered pages), CUDA graphs, cold L2.
 ''' if DIAG else "") + '''
@@ -177,32 +182,22 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            for p in [("rows", 128, 4, 3, 4, True), ("rows", 64, 4, 3, 4, True), ("rows", 128, 8, 3, 4, True),
-                      ("rows", 64, 8, 3, 2, True), ("head", 64, 4, 3, 4, False), ("head", 64, 4, 3, 2, True),
-                      ("head", 128, 4, 3, 2, True), ("head", 128, 8, 3, 2, True)]:
-                try:
-                    o = _kernel_path(data, p).float()
-                    err = float((o.view(-1) - ref.view(-1)).norm() / ref.norm())
-                    res.append((timed(lambda p=p: _kernel_path(data, p)), err, p))
-                except Exception as e:
-                    print(f"  b {batch} L {L} {p} FAILED {repr(e)[:160]}", flush=True)
-            cands = [(3, 2), (3, 4)]
-            for st, occ in cands:
-                def fn(st=st, occ=occ):
+            cands = [(3, 2, 0), (3, 4, 0), (4, 2, 1), (4, 4, 1), (4, 8, 1), (3, 4, 1), (5, 4, 1), (6, 4, 1)]
+            for st, occ, vt1 in cands:
+                def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
                     T = batch * L
                     qkv = data["qkv"].view(T, -1)
                     q = _norm_rope_store_fused(data, qkv, cfg, FP8)
-                    return _fv(data, q, qkv, cfg, st, occ)
+                    return _fv(data, q, qkv, cfg, st, occ, vt1)
                 try:
                     o = fn().float()
                     err = float((o.view(-1) - ref.view(-1)).norm() / ref.norm())
-                    res.append((timed(fn), err, ("fv", st, occ)))
+                    res.append((timed(fn), err, ("fv", st, occ, vt1)))
                 except Exception as e:
-                    print(f"  b {batch} L {L} fv {st} {occ} FAILED {repr(e)[:200]}", flush=True)
+                    print(f"  b {batch} L {L} fv {st} {occ} {vt1} FAILED {repr(e)[:200]}", flush=True)
         else:
-            cands = [(128, 4, 3, occ) for occ in (1, 2, 3, 4)] + [(256, 4, 3, occ) for occ in (1, 2, 4)] + [
-                (256, 8, 3, 2), (256, 8, 3, 4), (256, 4, 2, 2), (128, 2, 3, 2), (128, 2, 3, 4), (128, 4, 4, 2), (256, 8, 2, 2)]
+            cands = [(128, 4, 3, 2), (128, 4, 3, 4)]
             for bn, w, stg, occ in cands:
                 if True:
                     if True:

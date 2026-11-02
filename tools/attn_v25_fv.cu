@@ -1,6 +1,9 @@
 // Full-attention verify (q_len 8) split-KV partials for tp8 (16 query / 2 KV heads, D 64), attention v23 / v24 / v25.
 // v24 source: v23 + a "memory" clobber on the V transpose's inline ld.shared / st.shared (review r17 m1); same PTX / cubin.
-// v25 source: v24 + ST overridable at compile time (-DST=n; default 3 gives v24's cubin byte for byte).
+// v25 source: v24 + ST overridable at compile time (-DST=n; default 3 gives v24's cubin byte for byte), and VT1 = 1:
+// one V^T buffer instead of two (each tile first waits for the previous tile's P.V, before the loop-top barrier, so no
+// warp transposes into V^T while a P.V still reads it): 18 KB less shared memory, so ST = 4 (3 tiles in flight) still
+// fits 2 CTAs per SM.
 // v23 vs v22 (same math, same layouts): per-thread loader / transpose offsets computed once and pinned (v22's
 // SASS recomputed them from threadIdx every tile, ~120 integer ops per warp per tile), stage index by counter (no
 // i % ST), and S(i) = Q.K^T issued before the V transpose so the tensor cores overlap it.
@@ -23,6 +26,10 @@
 #define G 8
 #define LQ 8
 #define BN 64
+#ifndef VT1
+#define VT1 0
+#endif
+#define NVT (VT1 ? 1 : 2)  // V^T buffers
 #ifndef ST
 #define ST 3  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
 #endif
@@ -85,7 +92,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   unsigned char* Ks = smem;
   unsigned char* Vs = smem + ST * TILE;
   unsigned char* Vt = smem + 2 * ST * TILE;
-  unsigned char* Qs = Vt + 4 * VTH;  // V^T is double-buffered (P.V of tile i runs into tile i + 1)
+  unsigned char* Qs = Vt + NVT * 2 * VTH;  // V^T double-buffered (P.V of tile i runs into tile i + 1) unless VT1
   const float NEG = __int_as_float(0xff800000);
   const int s = blockIdx.x, b = blockIdx.y;
   const int tid = threadIdx.x, warp = tid >> 5, lane = tid & 31;
@@ -164,7 +171,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 #pragma unroll
   for (int n = 0; n < 9; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
   float m0 = NEG, m1 = NEG;
-  for (int k = tid; k < 2 * 2 * 8 * 8; k += 256) {  // ones rows: 2 buffers x 2 heads x 8 rows x 8 chunks (E4M3 1.0)
+  for (int k = tid; k < NVT * 2 * 8 * 8; k += 256) {  // ones rows: NVT buffers x 2 heads x 8 rows x 8 chunks (E4M3 1.0)
     const int buf_head = k >> 6, rr = (k >> 3) & 7, c = k & 7;
     *(uint4*)(Vt + buf_head * VTH + (64 + rr) * 128 + c * 16) = make_uint4(0x38383838u, 0x38383838u, 0x38383838u, 0x38383838u);
   }
@@ -176,6 +183,12 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   const unsigned qs = smem_u32(Qs + h * QH);
   int st = 0;  // stage of tile i (i % ST); tile i + ST - 1 loads into stage st - 1 (mod ST), tile i - 1's
   for (int i = 0; i < ntiles; ++i) {
+#if VT1
+    if (i > 0) {  // tile i - 1's P.V reads the single V^T buffer: done (this warpgroup) before the barrier below
+      float dz[8][4] = {};
+      WG_WAIT_SO(dz, oacc);
+    }
+#endif
     asm volatile("cp.async.wait_group %0;" :: "n"(ST - 2));
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // this thread's cp.async data -> wgmma (async proxy)
     __syncthreads();  // tile i's K/V visible; every warp is past tile i - 1's transpose and S / P.V waits
@@ -190,7 +203,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     WG_QK_SS(sc, desc(qs + 32, 1024, 1), desc(kt + 32, 1024, 1), 1);
     asm volatile("wgmma.commit_group.sync.aligned;" ::: "memory");
     {  // V tile i -> V^T[i & 1]: task = 4 dims x 4 key slots; slot 4t + 2a' + e of 32-key block <- key 8(2A + a') + 2t + e
-      const unsigned vsrc = vs_base + st * TILE, vdst = vt_base + (i & 1) * 2 * VTH;
+      const unsigned vsrc = vs_base + st * TILE, vdst = vt_base + (VT1 ? 0 : (i & 1)) * 2 * VTH;
 #pragma unroll
       for (int rep = 0; rep < 2; ++rep) {
         unsigned w0, w1, w2, w3;
@@ -253,7 +266,7 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
       pa[kb][2] = pack_e4(sc[n0 + 2][0], sc[n0 + 2][1], sc[n0 + 3][0], sc[n0 + 3][1]);
       pa[kb][3] = pack_e4(sc[n0 + 2][2], sc[n0 + 2][3], sc[n0 + 3][2], sc[n0 + 3][3]);
     }
-    const unsigned vt = smem_u32(Vt + (i & 1) * 2 * VTH + h * VTH);
+    const unsigned vt = smem_u32(Vt + (VT1 ? 0 : (i & 1)) * 2 * VTH + h * VTH);
     // fence, both k-steps, commit and wait in one asm: the P fragments and the rescaled O are inputs, so the
     // fence cannot be scheduled ahead of their producers
     WG_PV2(oacc, pa[0], pa[1], desc(vt, 1024, 1), desc(vt + 32, 1024, 1));
