@@ -26,7 +26,7 @@ except (ValueError, KeyError, TypeError):
     job_id, problem = "UNPARSED(rc=%d)" % out.returncode, path.split("/")[0]
 same = hashlib.sha256(open(path, "rb").read()).hexdigest() == sha
 with open("sends.tsv", "a") as f:
-    f.write("\t".join([now, kind, job_id, problem, path, sha, commit, "" if same else "FILE CHANGED DURING SEND"]) + "\n")
+    f.write("\t".join([now, kind, job_id, problem, path, sha, commit, "; ".join(x for x in [f"okc rc={out.returncode}, no job id" if job_id.startswith("UNPARSED") else "", "" if same else "FILE CHANGED DURING SEND"] if x)]) + "\n")
 if out.returncode or job_id.startswith("UNPARSED") or not same:
     # review round 11 n1: keep okc's own stdout / stderr of a failed send (okc never echoes OKC_TOKEN)
     with open("sends_failed.log", "a") as f:

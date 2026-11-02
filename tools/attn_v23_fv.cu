@@ -190,16 +190,16 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
 #pragma unroll
       for (int rep = 0; rep < 2; ++rep) {
         unsigned w0, w1, w2, w3;
-        asm volatile("ld.shared.b32 %0, [%1];" : "=r"(w0) : "r"(vsrc + tr_l[rep]) : "memory");
-        asm volatile("ld.shared.b32 %0, [%1];" : "=r"(w1) : "r"(vsrc + tr_l1[rep]) : "memory");
-        asm volatile("ld.shared.b32 %0, [%1+1024];" : "=r"(w2) : "r"(vsrc + tr_l[rep]) : "memory");
-        asm volatile("ld.shared.b32 %0, [%1+1024];" : "=r"(w3) : "r"(vsrc + tr_l1[rep]) : "memory");
+        asm volatile("ld.shared.b32 %0, [%1];" : "=r"(w0) : "r"(vsrc + tr_l[rep]));
+        asm volatile("ld.shared.b32 %0, [%1];" : "=r"(w1) : "r"(vsrc + tr_l1[rep]));
+        asm volatile("ld.shared.b32 %0, [%1+1024];" : "=r"(w2) : "r"(vsrc + tr_l[rep]));
+        asm volatile("ld.shared.b32 %0, [%1+1024];" : "=r"(w3) : "r"(vsrc + tr_l1[rep]));
         const unsigned x = __byte_perm(w0, w1, 0x5140), y = __byte_perm(w2, w3, 0x5140);
         const unsigned x2 = __byte_perm(w0, w1, 0x7362), y2 = __byte_perm(w2, w3, 0x7362);
-        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][0]), "r"(__byte_perm(x, y, 0x5410)) : "memory");
-        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][1]), "r"(__byte_perm(x, y, 0x7632)) : "memory");
-        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][2]), "r"(__byte_perm(x2, y2, 0x5410)) : "memory");
-        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][3]), "r"(__byte_perm(x2, y2, 0x7632)) : "memory");
+        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][0]), "r"(__byte_perm(x, y, 0x5410)));
+        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][1]), "r"(__byte_perm(x, y, 0x7632)));
+        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][2]), "r"(__byte_perm(x2, y2, 0x5410)));
+        asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][3]), "r"(__byte_perm(x2, y2, 0x7632)));
       }
     }
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // V^T (st.shared) -> P.V wgmma (async proxy)

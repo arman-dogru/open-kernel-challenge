@@ -31,7 +31,8 @@ decode-v13-fused (base attn-fused): v13, for review.
   16/16. Its lower bound missed the board's 1.40899 by 0.0002, so v22 was never submitted (superseded by v23).
 - Prefill v3 submit 5bb734959f37453a: 1.115x (CI 1.098-1.132); board 1.088 -> 1.115. Lower bound does not clear 1.105:
   likely but not proven an improvement.
-- Ranks (Nov 2 ~2 PM ET, /api/v1/leaderboard): **overall 925/1872**; attention 896/1266, bf16 1487/1647, decode 875/1195,
+- Ranks (fetched Nov 2 2:04 PM ET from openkernelchallenge.dev /api/v1/leaderboard and /api/v1/leaderboard/<problem>;
+  response not committed, so treat as unverified): **overall 925/1872**; attention 896/1266, bf16 1487/1647, decode 875/1195,
   MoE 891/1319, prefill 693/809 (own board).
 
 v23 caveats (#21 review nits):
@@ -39,14 +40,15 @@ v23 caveats (#21 review nits):
   not exercised on CPU. Its only evidence on sm_90 is the judge's 16/16 runs.
 - The kv_scale GPU half (`ATTN_GPU=1` Part B of tools/tests/attn_v22_fv_kvscale.py) **still has not run on sm_90** (no
   H100/H200 off the judge). Only the CPU emulation (Part A) has passed.
-- r14 adds a `"memory"` clobber to the V-transpose's inline ld.shared/st.shared asm in tools/attn_v23_fv.cu. Under NVRTC
+- TODO (r14b, review r17 m1): the next attention kernel source (v24+) must add a `"memory"` clobber to the V-transpose's
+  inline ld.shared/st.shared asm. tools/attn_v23_fv.cu is kept at its 1005d60 content so tools/build_attn_v23.py reproduces
+  the submitted runs/v23_fv_addr.py byte-exact (sha256 8347529b..., verified). Measured in r14: with the clobber, under NVRTC
   12.9 and 13.4 (sm_90a, -std=c++17) the PTX and cubin are **byte-identical** to before (cubin sha256[:16] 8f3ec567... /
-  ec199394...; 120 regs, 0 spill), so the generated code does not change. runs/v23_fv_addr.py (the submitted file) is
-  NOT rebuilt; tools/build_attn_v23.py would now embed the new source text, so a rebuild would differ in bytes (not in code).
+  ec199394...; 120 regs, 0 spill), so the clobber does not change the generated code.
 
 sends.tsv (r14): new `notes` column; INFERRED / UNKNOWN text moved there; UNPARSED(rc=1) and `dedupe` rows annotated;
-18 branch-only check rows (attn-v16/v18/v19, attn-verify-v1, decode-v14/v15/v19b/v20/v21, prefill-v4/v5) folded in and
-marked; the two 8de0e22 rows note that 8de0e22 (decode-v20) is fb7404a in status-r13 (#19). tools/okc_send.py writes the
+16 branch-only check rows (plus the two 8de0e22 rows, now on main via #19) (attn-v16/v18/v19, attn-verify-v1, decode-v14/v15/v19b/v20/v21, prefill-v4/v5) folded in and
+marked, with their profiles copied from the branches (r14b; 639cbea4 has only a .log); the two 8de0e22 rows note that 8de0e22 (decode-v20) is fb7404a in status-r13 (#19). tools/okc_send.py writes the
 8-column format; tools/ledger.py reads it and the send ledger below was regenerated (no longer stale).
 
 ## Oct 31 4:26-5:37 PM ET: attention v22 series, 13 jobs (records for PR #20 review r1 M1; added Nov 2)
@@ -132,7 +134,8 @@ Review fixes (branch attn-v22, after merging origin/main a1860cc):
   host / fallback code is unchanged; it says nothing about the sm_90 CUDA kernel.
 - CPU interpreter localtest (`tools/localtest_attn.py` on v22): every case fails only the new-cache 8% check, identically
   for the old (8ee72590) and new builds: the Triton 3.9 interpreter's fp32 -> E4M3 cast bug (r6 n2 caveat, in the attention fused-store section below), not v22.
-  Triton caveat: the interpreter's fp32 -> E4M3 cast is wrong when rounding carries into the exponent (1.9375 -> 1.0), so
+  Triton caveat: the interpreter's fp32 -> E4M3 cast can drop the carry into the exponent in some binades (e.g. 1.9375 -> 1.0, 7.75 -> 4.0;
+  3.875 -> 4.0 and 15.5 -> 16.0 are correct) and rounds ties away from even (1.0625 -> 1.125), so
   CPU-interpreter new-cache failures are not evidence against a kernel; only the H200 judge's check is.
 - Offline Triton sm_90 harness (`SM90_GPU_TYPES=1 tools/tests/triton_sm90_compile.py runs/v22_cuda_fv.py`, run from
   muse_attention_decode/): 0 compile failures.
@@ -152,6 +155,25 @@ new check is needed before any submit (not sent: no OKC_TOKEN on the box after t
 - Ledger note (review round 13, #15): 17 older rows on main fail the ledger check. 16 of them have commit time equal to
   send time, i.e. they were back-filled after the fact. The v7_audit_nits row has commit 'dedupe' and a sha256 that does
   not match the file. They are left as recorded and not rewritten; treat them as unverified history.
+
+## Why profile .log files are empty (review round 13)
+The `profiles/<file>.<job>.log` that okc saves next to each run holds the last 16,000 characters the submission
+printed (`log_tail` in `okc status --json`). It is not a judge log. Our kernels print nothing: the BENCH
+exploration code that printed timings was removed in review round 10, and printing inside kernel_fn is not allowed
+(a tensor print would sync). So the .log files are empty (0 bytes), and an empty one means "no output". It does
+not mean a capture failure. tools/okc_send.py cannot add anything, because the file holds the run's own stdout.
+Options, not done: a one-line prepare()-time print in future kernel versions (torch / triton versions, path flags
+such as FASTSCALE or grouped_ok), which would make the .log useful for checking the judge's environment, e.g.
+torch._grouped_mm availability. That changes the kernel file, so it belongs in a new vN, not a retro-edit.
+
+## Oct 29 ~3:46-4:01 PM ET: decode v20 / attention v17 (branch decode-v20; folded into main via status-r13)
+- tools/rows_prefetch_patch.py (shared), tools/build_decode_v20.py, tools/build_attn_v17.py. The full-decode
+  (batch >= 2) split-KV "rows" kernel runs on 128-key tiles and loads the next tile's page indices one iteration
+  ahead (PREF). Plus #17 nits: the NB 2 comment now says "from 81 tokens"; the dead NB == 4 MINB branch is removed.
+- decode v20 check 5fa280a493f244a3: 1.366x (1.345-1.386); rows kernel 257 -> 245 us at decode 32 full, b16 flat.
+  attention v17 check 8deec285efbe4b57: 1.398x (1.377-1.424); decode 32 full 264 -> 249 us. Neither clears its PR
+  bar (decode 1.385, attention 1.409). The pages are randomly permuted, so each key is two random 128-byte reads;
+  ~2.6 TB/s is near what that access pattern gives.
 
 ## Oct 29 ~2:36-3:00 PM ET: leaderboard gaps; decode v18 / v18b; MoE v26e (Arman: climb incrementally, keep afloat)
 Leaderboard (public board, ~2:40 PM ET; overall rank 754 / 1589):
@@ -203,11 +225,13 @@ Follow-ups (~3:05 PM ET, status-r11):
   reference only; nothing builds on it.
 
 ## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from `okc problems` at ~2:53 PM ET (supersedes the ~2:45 PM line)
+(Current as of ~2:53 PM ET. Later per-round counts are in each round's section; quotas reset at 8 PM ET.)
 - Checks left: bf16 0 of 20 (resets 8 PM ET), attention 12, MoE 2 (after v26e b8a324016b7b4422), decode_layer 7
   (after v18 9566de62f7e94ed1 and v18b ae89a962123748e6), prefill_layer 20 (new 5th problem, not started).
 - Scored runs left: bf16 10, attention 8, MoE 7 (after the v26e submit), decode_layer 7, prefill_layer 10. Today's submits (Arman): MoE v26e 94cff1d839e947df 1.539x, MoE v26c
   7eaa9622f391455b 1.500x, decode v17 6a55705a372f40ac 1.318x (and earlier attention v15b 8f7ac0501b5849d7 1.385x).
-## Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
+
+## HISTORICAL (superseded by the Quotas section above; kept unedited per the no-silent-deletion rule): Quotas (UTC day Oct 29, i.e. since 8 PM ET Oct 28), from sends.tsv (~3:27 AM ET)
 - Checks used: bf16 19 of 20 (v27 x2 this session; 2 pre-check rejections created no job); attention 3 of 20; MoE 15 of 20 (v25, v25b this session); decode_layer 6 of 20
 - Checks used: bf16 17 of 20; attention 5 of 20 (v15a, v15b this session); MoE 15 of 20 (v25, v25b); decode_layer 6 of 20
   (v13 re-send 9a5880 and bf16 v7 re-send 9e6108 deduped by the judge).
@@ -809,15 +833,15 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-10-29 03:23:20 | 843d33d84aa34786 | muse_moe_w4a16 | check | v25b_fold_fill.py | c38267b1b940d906 | 5cdb8f9 | 1.391x (1.370-1.412), passed=True |  |
 | 2026-10-29 03:27:29 | 28ad328cf5284948 | muse_attention_decode | check | v15a_verify_split.py | 499fe7a8007ad498 | 4abfe28 | 1.232x (1.214-1.251), passed=True |  |
 | 2026-10-29 03:33:44 | ab5f387ae32242ba | muse_attention_decode | check | v15b_verify_route.py | 2196e01c425bce7c | 616fb66 | 1.376x (1.355-1.396), passed=True |  |
-| 2026-10-29 03:41:11 | 4ab6d497f55d4908 | muse_decode_layer | check | v14_verify_split.py | f3e6c9e309462024 | 876f997 | pending (profile not saved) | branch-only record, folded in r14 from decode-v14,decode-v15; commit not on main |
-| 2026-10-29 03:45:22 | 75b0321a5df9459d | muse_decode_layer | check | v15a_moe_bench.py | 9552ad356ed40c2b | a7aa618 | pending (profile not saved) | branch-only record, folded in r14 from decode-v15; commit not on main |
-| 2026-10-29 03:48:21 | 9f9021db0ad24f79 | muse_decode_layer | check | v15b_moe32.py | 1a77cb2b538be165 | eb6a018 | pending (profile not saved) | branch-only record, folded in r14 from decode-v15; commit not on main |
+| 2026-10-29 03:41:11 | 4ab6d497f55d4908 | muse_decode_layer | check | v14_verify_split.py | f3e6c9e309462024 | 876f997 | 1.278x (1.259-1.297), passed=True | branch-only record, folded in r14 from decode-v14,decode-v15; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 03:45:22 | 75b0321a5df9459d | muse_decode_layer | check | v15a_moe_bench.py | 9552ad356ed40c2b | a7aa618 | 1.281x (1.262-1.300), passed=True | branch-only record, folded in r14 from decode-v15; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 03:48:21 | 9f9021db0ad24f79 | muse_decode_layer | check | v15b_moe32.py | 1a77cb2b538be165 | eb6a018 | 1.259x (1.240-1.278), passed=True | branch-only record, folded in r14 from decode-v15; commit not on main; profiles copied from branch (r14b) |
 | 2026-10-29 03:51:05 | 8f7ac0501b5849d7 | muse_attention_decode | submit | v15b_verify_route.py | 2196e01c425bce7c | 5ced66c | 1.385x (1.364-1.409), passed=True |  |
-| 2026-10-29 03:58:46 | 3914e9a2ce234492 | muse_attention_decode | check | v16a_fullverify.py | 9e646b05bd0696df | f6b6bb3 | pending (profile not saved) | branch-only record, folded in r14 from attn-v16; commit not on main |
-| 2026-10-29 04:05:24 | 0e7a5ed370284884 | muse_attention_decode | check | v16b_fullverify.py | ba5539291c432d52 | b299381 | pending (profile not saved) | branch-only record, folded in r14 from attn-v16; commit not on main |
-| 2026-10-29 04:07:43 | d97b56e20552413e | muse_attention_decode | check | v16c_pair.py | cf60fd09b180cdcc | 036ea05 | pending (profile not saved) | branch-only record, folded in r14 from attn-v16; commit not on main |
-| 2026-10-29 04:19:24 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc returned no job id (rc=1); no judge job exists for this send |
-| 2026-10-29 04:19:39 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc returned no job id (rc=1); no judge job exists for this send |
+| 2026-10-29 03:58:46 | 3914e9a2ce234492 | muse_attention_decode | check | v16a_fullverify.py | 9e646b05bd0696df | f6b6bb3 | 1.179x (1.161-1.197), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:05:24 | 0e7a5ed370284884 | muse_attention_decode | check | v16b_fullverify.py | ba5539291c432d52 | b299381 | 1.286x (1.267-1.310), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:07:43 | d97b56e20552413e | muse_attention_decode | check | v16c_pair.py | cf60fd09b180cdcc | 036ea05 | 1.135x (1.118-1.156), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:19:24 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc rc=1, no job id; no judge job exists for this send |
+| 2026-10-29 04:19:39 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc rc=1, no job id; no judge job exists for this send |
 | 2026-10-29 04:20:08 | 9f218bc6dfb54dce | muse_bf16_proj | check | v27_wgmma.py | 5f4e121fe22e8f18 | 4e2b975 | pending (profile not saved) |  |
 | 2026-10-29 04:21:02 | ca0ac29de0c347d8 | muse_bf16_proj | check | v27_wgmma.py | fcc4113c87b5492f | f311bfb | 0.927x (0.913-0.941), passed=True |  |
 | 2026-10-29 04:29:40 | c20bde96ace6489d | muse_bf16_proj | check | v28_wgmma_pipe.py | 3613a8dee3e8c123 | cd5a674 | 0.915x (0.901-0.928), passed=True |  |
@@ -836,23 +860,23 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-10-29 15:11:02 | b007869e4f7e48ef | muse_prefill_layer | check | v2_dequant_grouped.py | a50a6821ea21d13e | 1125f74 | 1.013x (0.998-1.028), passed=True |  |
 | 2026-10-29 15:15:32 | 08475fbb90c34f16 | muse_prefill_layer | check | v2b_dequant_grouped.py | d0b2cc111752af14 | 7114f67 | 1.090x (1.074-1.107), passed=True |  |
 | 2026-10-29 15:21:43 | b7acb3f79b594fc7 | muse_decode_layer | check | v19_nb2_256_evict.py | d70c6c3ebea2f611 | b91650d | 1.358x (1.338-1.378), passed=True |  |
-| 2026-10-29 15:25:08 | e27dac5ab7d24e63 | muse_decode_layer | check | v19b_nb2_minb2.py | 35f2508ecc7370f1 | 079a320 | pending (profile not saved) | branch-only record, folded in r14 from decode-v19b; commit not on main |
-| 2026-10-29 15:33:01 | 9f59e5963dd740bd | muse_attention_decode | check | v16_verify_fused.py | 22101bf265eda1ef | a17702d | pending (profile not saved) | branch-only record, folded in r14 from attn-verify-v1; commit not on main |
+| 2026-10-29 15:25:08 | e27dac5ab7d24e63 | muse_decode_layer | check | v19b_nb2_minb2.py | 35f2508ecc7370f1 | 079a320 | 1.355x (1.334-1.375), passed=True | branch-only record, folded in r14 from decode-v19b; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 15:33:01 | 9f59e5963dd740bd | muse_attention_decode | check | v16_verify_fused.py | 22101bf265eda1ef | a17702d | 1.253x (1.234-1.272), passed=True | branch-only record, folded in r14 from attn-verify-v1; commit not on main; profiles copied from branch (r14b) |
 | 2026-10-29 15:41:57 | 7b69b2fcfffb40dd | muse_prefill_layer | submit | v2b_dequant_grouped.py | d0b2cc111752af14 | 99e0c27 | 1.088x (1.072-1.105), passed=True |  |
 | 2026-10-29 15:42:03 | 7702cb83b35b4737 | muse_decode_layer | submit | v19_nb2_256_evict.py | d70c6c3ebea2f611 | 1e4fd5c | 1.364x (1.344-1.385), passed=True |  |
-| 2026-10-29 15:49:19 | 5fa280a493f244a3 | muse_decode_layer | check | v20_rows_prefetch.py | eddbb3dc9261f21f | 8de0e22 | pending (profile not saved) | 8de0e22 is on branch decode-v20; cherry-picked as fb7404a (status-r13 / PR #19); branch-only record, folded in r14 from attn-v18,decode-v20,status-r13; commit not on main |
-| 2026-10-29 15:49:20 | 8deec285efbe4b57 | muse_attention_decode | check | v17_rows_prefetch.py | 7b07723ccbdd55b2 | 8de0e22 | pending (profile not saved) | 8de0e22 is on branch decode-v20; cherry-picked as fb7404a (status-r13 / PR #19); branch-only record, folded in r14 from attn-v18,decode-v20,status-r13; commit not on main |
+| 2026-10-29 15:49:19 | 5fa280a493f244a3 | muse_decode_layer | check | v20_rows_prefetch.py | eddbb3dc9261f21f | 8de0e22 | 1.366x (1.345-1.386), passed=True | 8de0e22 is on branch decode-v20; patch-identical to fb7404a (main via #19) and 5fba370 (main via #20) |
+| 2026-10-29 15:49:20 | 8deec285efbe4b57 | muse_attention_decode | check | v17_rows_prefetch.py | 7b07723ccbdd55b2 | 8de0e22 | 1.398x (1.377-1.424), passed=True | 8de0e22 is on branch decode-v20; patch-identical to fb7404a (main via #19) and 5fba370 (main via #20) |
 | 2026-10-29 15:57:17 | efae26e3adb24c0f | muse_prefill_layer | check | v3_gs_after_local.py | 4ad330b5f85597e0 | 3618d85 | 1.122x (1.106-1.139), passed=True |  |
-| 2026-10-29 16:04:45 | 639cbea473a548e1 | muse_attention_decode | check | v18_head_merge.py | af176d7deb57c9d5 | 7b5d0c1 | pending (profile not saved) | branch-only record, folded in r14 from attn-v18; commit not on main |
-| 2026-10-29 16:05:29 | 04328d59e9dc4916 | muse_prefill_layer | check | v4_dequant_rows4.py | ab987df2008bb9dd | 7b44294 | pending (profile not saved) | branch-only record, folded in r14 from prefill-v4; commit not on main |
-| 2026-10-29 16:07:06 | dc0ff5481e264763 | muse_attention_decode | check | v18_head_merge.py | c652e4646da7945c | e8dadfc | pending (profile not saved) | branch-only record, folded in r14 from attn-v18; commit not on main |
-| 2026-10-29 16:21:43 | 3b5207bbc0d042c8 | muse_attention_decode | check | v19_tok_norm.py | d2c08d3eaa046316 | eb73ccf | pending (profile not saved) | branch-only record, folded in r14 from attn-v19; commit not on main |
-| 2026-10-29 16:31:01 | 3d618fc619024323 | muse_attention_decode | check | v19b_tok_launch.py | 13f344720bdbb9da | 9548c6a | pending (profile not saved) | branch-only record, folded in r14 from attn-v19; commit not on main |
-| 2026-10-29 16:31:01 | 4df36a668b5f47b4 | muse_prefill_layer | check | v5_dequant_persist.py | 4ecdb442eee4ec5e | bc292f4 | pending (profile not saved) | branch-only record, folded in r14 from prefill-v5; commit not on main |
+| 2026-10-29 16:04:45 | 639cbea473a548e1 | muse_attention_decode | check | v18_head_merge.py | af176d7deb57c9d5 | 7b5d0c1 | pending (profile not saved) | branch-only record, folded in r14 from attn-v18; commit not on main; only the .log profile exists on the branch (r14b) |
+| 2026-10-29 16:05:29 | 04328d59e9dc4916 | muse_prefill_layer | check | v4_dequant_rows4.py | ab987df2008bb9dd | 7b44294 | 1.108x (1.091-1.124), passed=True | branch-only record, folded in r14 from prefill-v4; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:07:06 | dc0ff5481e264763 | muse_attention_decode | check | v18_head_merge.py | c652e4646da7945c | e8dadfc | 1.061x (1.045-1.077), passed=True | branch-only record, folded in r14 from attn-v18; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:21:43 | 3b5207bbc0d042c8 | muse_attention_decode | check | v19_tok_norm.py | d2c08d3eaa046316 | eb73ccf | 1.366x (1.346-1.387), passed=True | branch-only record, folded in r14 from attn-v19; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:31:01 | 3d618fc619024323 | muse_attention_decode | check | v19b_tok_launch.py | 13f344720bdbb9da | 9548c6a | 1.395x (1.374-1.416), passed=True | branch-only record, folded in r14 from attn-v19; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:31:01 | 4df36a668b5f47b4 | muse_prefill_layer | check | v5_dequant_persist.py | 4ecdb442eee4ec5e | bc292f4 | 1.119x (1.102-1.135), passed=True | branch-only record, folded in r14 from prefill-v5; commit not on main; profiles copied from branch (r14b) |
 | 2026-10-29 16:47:41 | 77bcf164955a4ca3 | muse_attention_decode | check | v20_verify_tiles.py | 727ad971fbb73bf7 | d6bf3b4 | 1.394x (1.373-1.415), passed=True |  |
 | 2026-10-29 16:54:22 | 278e0857f453409b | muse_attention_decode | check | v20b_verify_pref64.py | 27bdf39031d87872 | 8feba1b | 1.406x (1.385-1.433), passed=True |  |
-| 2026-10-29 20:35:41 | 88fc246e84084275 | muse_attention_decode | check | v21_verify_w8.py | ca52540959a3e395 | db57e78 | pending (profile not saved) | branch-only record, folded in r14 from decode-v21; commit not on main |
-| 2026-10-29 20:50:06 | af008940f4444134 | muse_decode_layer | check | v21_attn_v20b.py | 527180dbb92acf10 | 0fbbaa1 | pending (profile not saved) | branch-only record, folded in r14 from decode-v21; commit not on main |
+| 2026-10-29 20:35:41 | 88fc246e84084275 | muse_attention_decode | check | v21_verify_w8.py | ca52540959a3e395 | db57e78 | 1.367x (1.346-1.387), passed=True | branch-only record, folded in r14 from decode-v21; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 20:50:06 | af008940f4444134 | muse_decode_layer | check | v21_attn_v20b.py | 527180dbb92acf10 | 0fbbaa1 | 1.360x (1.340-1.380), passed=True | branch-only record, folded in r14 from decode-v21; commit not on main; profiles copied from branch (r14b) |
 | 2026-10-31 16:26:20 | b0d7d09101e64fd2 | muse_attention_decode | check | v22_cuda_fv.py | e342863dea6df20b | 179fdd4 | 1.254x (1.235-1.273), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
 | 2026-10-31 16:34:54 | 6939558c645240ab | muse_attention_decode | check | v22_cuda_fv.py | 7edd8df2632efa5a | 93a54cb | 1.267x (1.248-1.291), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
 | 2026-10-31 16:44:02 | 833763a0bb304f7b | muse_attention_decode | check | v22_cuda_fv.py | 678d5157d9e48721 | dceb08d | pending (profile not saved) | INFERRED from same-second commit; okc exposes only content_hash |
