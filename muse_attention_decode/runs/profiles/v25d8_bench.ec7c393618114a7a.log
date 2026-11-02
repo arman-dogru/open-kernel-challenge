@@ -1,0 +1,8 @@
+v25d diag: NVIDIA H200 floor 4.86 us
+v25 WS validate: PASS 108/108 (bit-exact vs v24 FV at equal splits, rel-L2 <= 0.02 vs v24 default) in 2 s
+b 16 L 8: 328 MB K+V, v24 170.8 us (1.97 TB/s) | best 170.5 us ('fv', 3, 4, 0) e0.0e+00
+  ('fv', 3, 4, 0) 170.5 e0e+00; ('fv', 2, 2, 64) 211.6 e3e-03; ('fv', 3, 3, 64) 211.9 e3e-03; ('fv', 3, 2, 64) 212.0 e3e-03; ('fv', 3, 4, 64) 221.9 e0e+00; ('fv', 2, 4, 64) 224.8 e0e+00
+b 32 L 8: 661 MB K+V, v24 325.2 us (2.06 TB/s) | best 324.9 us ('fv', 3, 4, 0) e0.0e+00
+  ('fv', 3, 4, 0) 324.9 e0e+00; ('fv', 2, 2, 64) 400.2 e4e-03; ('fv', 3, 2, 64) 401.0 e4e-03; ('fv', 3, 3, 64) 401.3 e4e-03; ('fv', 2, 4, 64) 413.5 e0e+00; ('fv', 3, 4, 64) 414.1 e0e+00
+v25d summary (b L: v24 / best us, cfg): 16 8: 170.8 / 170.5 ('fv', 3, 4, 0); 32 8: 325.2 / 324.9 ('fv', 3, 4, 0)
+v25d diag: done in 2 s
