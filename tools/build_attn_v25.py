@@ -16,6 +16,8 @@ SRC = "muse_attention_decode/runs/v24_rows_occ4.py"
 s = open(SRC).read()
 cu = open("tools/attn_v25_fv.cu").read()
 assert '"""' not in cu and cu.count('"memory"') >= 16
+ws = open("tools/attn_v25_ws.cu").read()  # warp-specialized variant (flag bit 6 of fv_vt1)
+assert '"""' not in ws and ws.count('"memory"') >= 20
 DIAG = sys.argv[1] == "--diag"
 cfg = {"fv_st": 3, "fv_occ": 4, "fv_vt1": 0, "rows": [128, 4, 3, 4, True]}
 if DIAG:
@@ -33,20 +35,23 @@ def rep(text, old, new):
 i = s.index('_FV_SRC = r"""') + len('_FV_SRC = r"""')
 j = s.index('"""', i)
 s = s[:i] + "\n" + cu + s[j:]
+k = s.index("\n", i + 1 + len(cu)) + 1  # after the closing line of _FV_SRC
+s = s[:k] + '_WS_SRC = r"""\n' + ws + '"""  # tools/attn_v25_ws.cu: attn_fvws (fv_vt1 & 64)\n' + s[k:]
 
 s = rep(s, '''FV_BN, FV_ST = 64, 3  # must match BN / ST in tools/attn_v22_fv.cu
 FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)''',
         f'''FV_BN = 64  # must match BN in tools/attn_v25_fv.cu
 FV_ST = {cfg["fv_st"]}  # cp.async stages (-DST; 3 = v24)
-FV_VT1 = {cfg["fv_vt1"]}  # flags: VT1 (single V^T buffer) | FVSKIP << 1 (diag only) | PF << 3 (page-index prefetch); 0 = v24
+FV_VT1 = {cfg["fv_vt1"]}  # flags: VT1 | FVSKIP << 1 (diag) | PF << 3 (3 bits) | 64 = warp-specialized attn_fvws; 0 = v24
 FV_OCC = {cfg["fv_occ"]}  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM at ST 3; the rest is load balance)
 ROWS_FULL = ("rows", {cfg["rows"][0]}, {cfg["rows"][1]}, {cfg["rows"][2]}, {cfg["rows"][3]}, {cfg["rows"][4]})  # full decode, batch >= 2
 
 
 def _fv_smem(st, vt1=None):
     vt1 = FV_VT1 if vt1 is None else vt1
-    return 2 * st * FV_BN * 128 + (1 if vt1 & 1 else 2) * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
+    return 2 * st * FV_BN * 128 + (1 if vt1 & 1 else 2) * 2 * 9216 + 2 * 8192 + 1024 + (
+        128 if vt1 & 64 else 0)  # K + V E4M3 stages, V^T buffers (72 rows), Q, alignment (+ WS mbarriers)
 
 
 FV_SMEM = _fv_smem(FV_ST)''')
@@ -60,7 +65,7 @@ s = rep(s, '''def _fv_cubin():
     if ("cubin", st, vt1) not in _FV:''')
 s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 & 1 else []) + (
             [f"-DFVSKIP={(vt1 >> 1) & 3}".encode()] if (vt1 >> 1) & 3 else []) + (
-            [f"-DPF={vt1 >> 3}".encode()] if vt1 >> 3 else [])  # vt1 = VT1 | FVSKIP << 1 (diag) | PF << 3''')
+            [f"-DPF={(vt1 >> 3) & 7}".encode()] if (vt1 >> 3) & 7 else [])  # vt1 = VT1 | FVSKIP << 1 (diag) | PF << 3 | WS 64''')
 s = rep(s, '''        _FV["cubin"] = cubin
     return _FV["cubin"]''', '''        _FV[("cubin", st, vt1)] = cubin
     return _FV[("cubin", st, vt1)]''')
@@ -97,6 +102,11 @@ def _kernel_path(data, path_override=None):
 s = rep(s, '''    path = _attn_path(kind, L, batch, hkv, d)
     if path is None and _fv_ok''', '''    path = _attn_path(kind, L, batch, hkv, d) if path_override is None else path_override
     if path is None and _fv_ok''')
+
+s = rep(s, '''        err, prog = nvrtc.nvrtcCreateProgram(_FV_SRC.encode(), b"attn_fv.cu", 0, [], [])''',
+        '''        err, prog = nvrtc.nvrtcCreateProgram((_WS_SRC if vt1 & 64 else _FV_SRC).encode(), b"attn_fv.cu", 0, [], [])''')
+s = rep(s, '''            f = mod.get_function("attn_fv")''', '''            f = mod.get_function("attn_fvws" if vt1 & 64 else "attn_fv")''')
+s = rep(s, '''        f((nsplit, batch), (256,), (''', '''        f((nsplit, batch), (288 if vt1 & 64 else 256,), (''')
 
 head = ('''# okc: problem=muse_attention_decode
 """''' + name + ''': v24 + attention v25 source (tools/build_attn_v25.py): the full-verify kernel from tools/attn_v25_fv.cu
@@ -143,6 +153,58 @@ def _v25_inputs(batch, L, seed, dev, ctx=80000):
                        "sm_scale": d ** -0.5, "kv_scale": 1.0}}
 
 
+def _v25_validate():
+    """WS kernel (flags 64) vs v24's FV kernel at the same split count (bit-exact expected: same smem bytes, same
+    MMA / softmax order) and vs the judge's check (reference.check_implementation), on the local FV cases plus
+    forced split counts (splits/SM 1 .. 33: empty splits on short contexts). Thresholds: max |ws - v24| == 0
+    (REL_TOL 0; anything above is reported as a mismatch with its rel-L2), check_implementation ok."""
+    import time
+    t0 = time.time()
+    try:
+        import reference as R
+    except Exception as e:
+        print("v25 WS validate: reference not importable:", repr(e)[:200], flush=True)
+        return
+    cases = [dict(batch=2, ctx=900, page=1, kv_scale=0.015625), dict(batch=3, ctx=3000), dict(batch=2, ctx=3000),
+             dict(batch=17, ctx=1800, spread="agentic"), dict(batch=2, ctx=700, spread="mixed", page=1),
+             dict(batch=2, ctx=10), dict(batch=2, ctx=10, page=1), dict(batch=4, ctx=2500, dist="edges", page=1),
+             dict(batch=3, ctx=2000, dist="coherent"), dict(batch=2, ctx=1500, dist="soft", page=16),
+             dict(batch=5, ctx=4100, page=1, spread="agentic"), dict(batch=16, ctx=80000, page=1, spread="agentic")]
+    n = bad = 0
+    for ci, c in enumerate(cases):
+        if time.time() - t0 > 120:
+            print("v25 WS validate: (time guard)", flush=True)
+            break
+        try:
+            data = R.generate_input(heads="tp8", layer="full", q_len=8, seed=500 + ci, **c)
+        except Exception as e:
+            print(f"v25 WS validate: case {c} generate_input failed {repr(e)[:160]}", flush=True)
+            continue
+        cfg = data["config"]
+        T = cfg["batch"] * 8
+        for occ in ((1, 2, 4, 8, 33) if cfg["batch"] < 16 else (2, 4)):
+            for st in (3, 2):
+                outs = []
+                for flags in (0, 64):
+                    qkv = data["qkv"].view(T, -1)
+                    q = _norm_rope_store_fused(data, qkv, cfg, FP8)
+                    outs.append(_fv(data, q, qkv, cfg, st, occ, flags))
+                torch.cuda.synchronize()
+                v24o, wso = outs
+                dmax = float((wso.float() - v24o.float()).abs().max())
+                rel = float((wso.float() - v24o.float()).norm() / v24o.float().norm().clamp_min(1e-30))
+                ok, msg = R.check_implementation(data, R.collect(data, wso))
+                finite = bool(torch.isfinite(wso.float()).all())
+                n += 1
+                if dmax != 0.0 or not ok or not finite:
+                    bad += 1
+                    print(f"  WS MISMATCH {c} occ {occ} st {st}: max|ws-v24| {dmax:.3e} rel {rel:.2e} check {ok} {msg[:120]}",
+                          flush=True)
+        del data
+    print(f"v25 WS validate: {'PASS' if bad == 0 and n else 'FAIL'} {n - bad}/{n} (bit-exact vs v24 FV + check_implementation)"
+          f" in {time.time() - t0:.0f} s", flush=True)
+
+
 def _v25_diag():
     import time
     if _DIAG25 or not torch.cuda.is_available() or torch.cuda.get_device_capability() != (9, 0):
@@ -173,8 +235,9 @@ def _v25_diag():
 
     floor = timed(lambda: tiny.zero_())
     print(f"v25d diag: {torch.cuda.get_device_name()} floor {floor:.2f} us", flush=True)
+    _v25_validate()
     summ = []
-    for batch, L in ((16, 8), (32, 8), (32, 1), (16, 1)):
+    for batch, L in ((16, 8), (32, 8)):
         if time.time() - t0 > 240:
             print("(time guard)", flush=True)
             break
@@ -184,9 +247,7 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            # vt1 = VT1 | FVSKIP << 1: FVSKIP 1 = loads + barriers only, 2 = + Q.K and V transpose (diag, wrong output)
-            cands = [(3, 4, 0), (3, 4, 2 << 3), (3, 4, 4 << 3), (3, 4, 8 << 3), (3, 2, 4 << 3), (4, 4, 1 | 4 << 3), (2, 4, 8 << 3),
-                     (3, 4, 2 | 4 << 3), (3, 4, 2 | 8 << 3), (4, 4, 4 | 4 << 3)]  # (ST, splits, VT1 | FVSKIP << 1 | PF << 3)
+            cands = [(3, 4, 0), (3, 4, 64), (3, 2, 64), (3, 3, 64), (3, 6, 64), (3, 8, 64), (2, 4, 64), (2, 2, 64)]  # (ST, splits/SM, flags; 64 = WS)
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
