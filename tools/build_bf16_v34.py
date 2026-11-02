@@ -9,6 +9,7 @@ tools/bf16_v34_cfg.py. Run from the repo root.
 import json, re, sys
 
 DIAG = "--diag" in sys.argv
+DIAG_NAME = sys.argv[sys.argv.index("--diag") + 1] if DIAG and len(sys.argv) > sys.argv.index("--diag") + 1 else "v34d_bench"
 route, name = {}, "v34_routed"
 if not DIAG:
     route = json.load(open(sys.argv[1]))
@@ -336,7 +337,7 @@ kernel (tools/bf16_v34_stream.cu) compiled in prepare() and an untimed one-time 
 and cuBLAS for every BF16 layer x m <= 32 and the router (tools/build_bf16_v34.py --diag).
 
 v6:'''
-    dst = "muse_bf16_proj/runs/v34d_bench.py"
+    dst = f"muse_bf16_proj/runs/{DIAG_NAME}.py"
 else:
     ROUTE_SRC = "V34_ROUTE = {\n" + "".join(
         f"    ({k.split(':')[0]!r}, {int(k.split(':')[1])}): ({tuple(v[0])}, {tuple(v[1])}),\n"
