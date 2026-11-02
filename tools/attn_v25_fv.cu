@@ -26,6 +26,9 @@
 #define G 8
 #define LQ 8
 #define BN 64
+#ifndef PF
+#define PF 1  // page-index prefetch depth in tiles (1 = v24: loaded one tile ahead, so every tile waits one global latency)
+#endif
 #ifndef FVSKIP
 #define FVSKIP 0  // diagnostic only: 1 = loads + barriers only (no MMA / softmax), 2 = also Q.K + V transpose, no softmax / P.V
 #endif
@@ -182,7 +185,13 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
   asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // Q (st.shared) -> wgmma; the loop's first barrier orders it
 #pragma unroll
   for (int k = 0; k < ST - 1; ++k) issue(k, k, rowof(k));
+#if PF > 1
+  int pq[PF];  // rows (page-table resolved) of tiles i + ST - 1 .. i + ST + PF - 2; -1 = past the end
+#pragma unroll
+  for (int k = 0; k < PF; ++k) pq[k] = (int)rowof(ST - 1 + k);
+#else
   long long nextrow = rowof(ST - 1);
+#endif
   const unsigned qs = smem_u32(Qs + h * QH);
   int st = 0;  // stage of tile i (i % ST); tile i + ST - 1 loads into stage st - 1 (mod ST), tile i - 1's
   for (int i = 0; i < ntiles; ++i) {
@@ -195,8 +204,15 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     asm volatile("cp.async.wait_group %0;" :: "n"(ST - 2));
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // this thread's cp.async data -> wgmma (async proxy)
     __syncthreads();  // tile i's K/V visible; every warp is past tile i - 1's transpose and S / P.V waits
+#if PF > 1
+    issue(i + ST - 1, st == 0 ? ST - 1 : st - 1, (long long)pq[0]);  // into tile i - 1's stage (fully consumed)
+#pragma unroll
+    for (int k = 0; k < PF - 1; ++k) pq[k] = pq[k + 1];
+    pq[PF - 1] = (int)rowof(i + ST + PF - 1);
+#else
     issue(i + ST - 1, st == 0 ? ST - 1 : st - 1, nextrow);  // into tile i - 1's stage (fully consumed)
     nextrow = rowof(i + ST);
+#endif
 #if FVSKIP == 1
     st = st == ST - 1 ? 0 : st + 1;
     continue;

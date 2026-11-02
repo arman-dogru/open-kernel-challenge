@@ -39,7 +39,7 @@ FV_SMEM = 2 * FV_ST * FV_BN * 128 + 2 * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3
 FV_OCC = 4  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM; the rest is load balance)''',
         f'''FV_BN = 64  # must match BN in tools/attn_v25_fv.cu
 FV_ST = {cfg["fv_st"]}  # cp.async stages (-DST; 3 = v24)
-FV_VT1 = {cfg["fv_vt1"]}  # 1: single V^T buffer (-DVT1; 0 = v24)
+FV_VT1 = {cfg["fv_vt1"]}  # flags: VT1 (single V^T buffer) | FVSKIP << 1 (diag only) | PF << 3 (page-index prefetch); 0 = v24
 FV_OCC = {cfg["fv_occ"]}  # split-KV programs per SM for _nsplit (the kernel fits 2 per SM at ST 3; the rest is load balance)
 ROWS_FULL = ("rows", {cfg["rows"][0]}, {cfg["rows"][1]}, {cfg["rows"][2]}, {cfg["rows"][3]}, {cfg["rows"][4]})  # full decode, batch >= 2
 
@@ -59,7 +59,8 @@ s = rep(s, '''def _fv_cubin():
     vt1 = FV_VT1 if vt1 is None else vt1
     if ("cubin", st, vt1) not in _FV:''')
 s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 & 1 else []) + (
-            [f"-DFVSKIP={vt1 >> 1}".encode()] if vt1 >> 1 else [])  # vt1 bit 0: VT1; bits 1+: FVSKIP (diag)''')
+            [f"-DFVSKIP={(vt1 >> 1) & 3}".encode()] if (vt1 >> 1) & 3 else []) + (
+            [f"-DPF={vt1 >> 3}".encode()] if vt1 >> 3 else [])  # vt1 = VT1 | FVSKIP << 1 (diag) | PF << 3''')
 s = rep(s, '''        _FV["cubin"] = cubin
     return _FV["cubin"]''', '''        _FV[("cubin", st, vt1)] = cubin
     return _FV[("cubin", st, vt1)]''')
@@ -184,7 +185,8 @@ def _v25_diag():
         res = []
         if L == 8:
             # vt1 = VT1 | FVSKIP << 1: FVSKIP 1 = loads + barriers only, 2 = + Q.K and V transpose (diag, wrong output)
-            cands = [(3, 4, 0), (3, 4, 2), (4, 4, 3), (2, 4, 2), (3, 8, 2), (3, 4, 4), (4, 4, 5), (5, 4, 3), (6, 4, 3), (8, 4, 3)]
+            cands = [(3, 4, 0), (3, 4, 2 << 3), (3, 4, 4 << 3), (3, 4, 8 << 3), (3, 2, 4 << 3), (4, 4, 1 | 4 << 3), (2, 4, 8 << 3),
+                     (3, 4, 2 | 4 << 3), (3, 4, 2 | 8 << 3), (4, 4, 4 | 4 << 3)]  # (ST, splits, VT1 | FVSKIP << 1 | PF << 3)
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
