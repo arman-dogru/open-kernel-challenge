@@ -94,3 +94,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-31 17:36:32	check	b9586ff0a9db47f0	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	8ee72590baa893fcc0ca2ed5df701d44c91e1cb8c302d945d109cebe05693c2d(INFERRED from same-second commit; okc exposes only content_hash)	5039724
 2026-11-02 10:20:20	check	fe141d068e594e14	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	d2925cb84321faeac15c47620687cb9059559445fa92c72dffcfe616d5b89d60	6b2ef88
 2026-11-02 10:42:36	check	f2fac59291494e89	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	99d1fef
+2026-11-02 14:18:26	check	7f0858a69e0b4492	muse_decode_layer	muse_decode_layer/runs/v23_fv_attn.py	01c431ab724fd10e4bba7a00113a9a9d66a3d4f46437a9ac7144d6dfee7b9b6a	8b51f37
