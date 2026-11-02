@@ -11,6 +11,7 @@
 //    then each warp's lane 0 arrives on the stage's "empty" mbarrier (count 8), softmax, P.V issue.
 //  - v24 diagnostic (v25d4): loads alone ran at ~2.85 TB/s but the full kernel at ~2 TB/s because every tile's
 //    cp.async issue waited behind the CTA-wide barriers and the softmax; here no consumer barrier gates the loads.
+// The last tile's P.V is waited inside the loop (no wgmma serialization, ptxas C7515).
 // Every inline asm touching shared memory carries a "memory" clobber.
 #define D 64
 #define HKV 2
@@ -284,10 +285,8 @@ attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned cha
     // fence, both k-steps, commit and wait in one asm: the P fragments and the rescaled O are inputs, so the
     // fence cannot be scheduled ahead of their producers
     WG_PV2(oacc, pa[0], pa[1], desc(vt, 1024, 1), desc(vt + 32, 1024, 1));
-  }
-  {
-    float dummy[8][4] = {};
-    WG_WAIT_SO(dummy, oacc);  // last tile's P.V
+    if (i == ntiles - 1) WG_WAIT_SO(sc, oacc);  // last tile's P.V, inside the loop: a wait after the loop (v24's) made
+                                                // ptxas serialize every wgmma here (C7515)
   }
   const float l0 = oacc[8][0], l1 = oacc[8][2];  // full row sums (every key column of the tile went through the MMA)
   const float f0 = vsc / (l0 > 0.f ? l0 : 1.f), f1 = vsc / (l1 > 0.f ? l1 : 1.f);

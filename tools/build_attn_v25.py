@@ -335,7 +335,7 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            cands = [(3, 4, 0), (3, 4, 2), (3, 2, 64)]  # (ST, splits/SM, flags; 2 = v24 loads only, 64 = WS)
+            cands = [(3, 4, 0), (3, 2, 64), (3, 3, 64), (3, 4, 64), (2, 2, 64), (2, 4, 64)]  # (ST, splits/SM, flags; 64 = WS)
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
@@ -350,9 +350,7 @@ def _v25_diag():
                 except Exception as e:
                     print(f"  b {batch} L {L} fv {st} {occ} {vt1} FAILED {repr(e)[:200]}", flush=True)
             # gather microbenchmark (tools/attn_v25_gbench.cu): kernel alone, no rope / combine
-            for kind, gst, npw, pad, occ in (("cpa", 3, 1, 1, 4), ("cpa", 3, 2, 1, 4), ("cpa", 3, 4, 1, 4), ("cpa", 6, 4, 1, 4),
-                                             ("bulk", 3, 1, 1, 4), ("bulk", 6, 1, 1, 4), ("bulk", 3, 1, 0, 4),
-                                             ("bulk", 3, 1, 0, 16), ("cpa", 3, 4, 0, 16)):
+            for kind, gst, npw, pad, occ in ():  # v25d7: cp.async 1 / 2 / 4 warps 104 / 97 / 93 us, TMA bulk 171+ (b16 L8)
                 try:
                     fn = _gb_launcher(data, kind, gst, npw, pad, occ)
                     fn()
