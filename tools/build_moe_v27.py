@@ -1,5 +1,5 @@
 """Builds the MoE v27 runs files from muse_moe_w4a16/runs/v26e_nb2_evict.py (exact replacements, each asserted once).
-  python3 tools/build_moe_v27.py diag                 -> runs/v27d_bench.py  (kernel_fn = v26e; untimed v27 sweep in prepare)
+  python3 tools/build_moe_v27.py diag [NAME]          -> runs/NAME.py (default v27d_bench)  (kernel_fn = v26e; untimed v27 sweep in prepare)
   python3 tools/build_moe_v27.py route ROUTE.json NAME -> runs/NAME.py       (moe_stream for the token counts in ROUTE.json)
 ROUTE.json: {"1": [[NT, NW, ST, TPS], [NT, NW, ST, TPS]], ...} = GEMM-1 and GEMM-2 tunes per scored token count (<= 32).
 Run at HEAD; the committed files must be byte-identical to its output."""
@@ -15,7 +15,7 @@ mode = sys.argv[1]
 assert mode in ("diag", "route")
 DIAG = mode == "diag"
 if DIAG:
-    name, route = "v27d_bench", {}
+    name, route = (sys.argv[2] if len(sys.argv) > 2 else "v27d_bench"), {}
 else:
     route = {int(k): (tuple(v[0]), tuple(v[1])) for k, v in json.loads(Path(sys.argv[2]).read_text()).items()}
     name = sys.argv[3]
@@ -36,7 +36,8 @@ a producer warp streaming the A-fragment tiles with TMA bulk copies (L2 evict-fi
 segment's activations staged once in shared memory, no split-K atomics (the <= 2 units a CTA shares with its
 neighbour are combined through a workspace + per-CTA launch counters; fixed order). GEMM 1 writes the BF16
 SiLU product, GEMM 2 FP32 rows; route_prep (lists only, one block) and v26e's post-norm Triton kernel unchanged.
-''' + ('''v27d: kernel_fn is v26e unchanged; prepare() runs a one-time untimed sweep of v27 tunes vs v26e (diagnostic).
+''' + ('''v27d: kernel_fn is v26e unchanged; prepare() runs a one-time untimed sweep of v27 tunes vs v26e (diagnostic),
+plus NOCOMPUTE builds of the best tunes (consumers skip the dequant + MMAs: the pure weight-streaming time).
 ''' if DIAG else f'''Routed token counts (GEMM-1 tune, GEMM-2 tune as (NT, NW, ST, TPS)): {sorted(route.items())}; other counts: v26e.
 ''') + '''
 v26e = v26c with''')
@@ -55,15 +56,16 @@ V27_ROUTE = ''' + repr(route) + '''
 _MODS27 = {}
 
 
-def _mod27(cfg, fast, K):
-    """cfg = (GATED, NT, NW, ST, TPS) -> (cupy function, dynamic smem bytes); compiled + attribute set once."""
+def _mod27(cfg, fast, K, nc=0):
+    """cfg = (GATED, NT, NW, ST, TPS) -> (cupy function, dynamic smem bytes); compiled + attribute set once.
+    nc = 1: NOCOMPUTE diagnostic build (weight streaming only, wrong output)."""
     import cupy as cp
-    key = (cfg, fast, K)
+    key = (cfg, fast, K, nc)
     if key not in _MODS27:
         g, nt, nw, st, tps = cfg
         assert v27_valid(cfg, K), cfg
         m = cp.RawModule(code=_CU27, options=("-std=c++17", f"-DGATED={g}", f"-DNT={nt}", f"-DNW={nw}", f"-DST={st}",
-                                              f"-DTPS={tps}", f"-DFASTSCALE={fast}"))
+                                              f"-DTPS={tps}", f"-DFASTSCALE={fast}", f"-DNOCOMPUTE={nc}"))
         f = m.get_function("moe_stream")
         shm = max(v27_smem(cfg, K), V27_SMEM_MIN)  # >= 116 KB: one CTA per SM
         f.max_dynamic_shared_size_bytes = shm
@@ -71,7 +73,7 @@ def _mod27(cfg, fast, K):
     return _MODS27[key]
 
 
-def _kernel_stream(data, state, t1, t2, stages=3):
+def _kernel_stream(data, state, t1, t2, stages=3, nc=0):
     """t1 / t2 = GEMM-1 / GEMM-2 tunes (NT, NW, ST, TPS). stages < 3: diagnostic partial paths (route_prep + GEMM 1 ...)."""
     import cupy as cp
     cfg = data["config"]
@@ -93,8 +95,8 @@ def _kernel_stream(data, state, t1, t2, stages=3):
     ids = data["topk_ids"].to(torch.int32).contiguous()
     inter = torch.empty((NR, I), device=dev, dtype=torch.bfloat16)
     y32 = torch.empty((NR, H), device=dev, dtype=torch.float32)  # non-local rows never read (slot < 0)
-    f1, s1, w1 = _mod27((1,) + tuple(t1), state["fast"], H)
-    f2, s2, w2 = _mod27((0,) + tuple(t2), state["fast"], I)
+    f1, s1, w1 = _mod27((1,) + tuple(t1), state["fast"], H, nc)
+    f2, s2, w2 = _mod27((0,) + tuple(t2), state["fast"], I, nc)
     P = state["v27_P"]
     ws, ctr = state["v27_ws"], state["v27_ctr"]
     m1 = _mod(4, H // 8, 1, 2, 1, state["fast"])  # route_prep only (lists, slot ids; RW1 = RW2 = 0: no zeroing)
@@ -183,7 +185,7 @@ def _v27_diag(state):
         return ts[len(ts) // 2]
 
     floor = timed(lambda: tiny.zero_())
-    print(f"v27d diag: {torch.cuda.get_device_name()} SMs {state['v27_P']} fast {state['fast']} floor {floor:.2f} us",
+    print(f"@NAME@ diag: {torch.cuda.get_device_name()} SMs {state['v27_P']} fast {state['fast']} floor {floor:.2f} us",
           flush=True)
     EXP = 4096 * 4096 * 3 * 9 // 16  # bytes per expert (codes + scales), GEMM 1 is 2/3
     summ = []
@@ -198,21 +200,21 @@ def _v27_diag(state):
         nts = (1,) if bs <= 8 else (1, 2)
         res = []
 
-        def run(t1, t2, stages=3):
+        def run(t1, t2, stages=3, nc=0):
             try:
-                o = _kernel_stream(data, state, t1, t2, stages)
-                if stages == 3:
+                o = _kernel_stream(data, state, t1, t2, stages, nc)
+                if stages == 3 and not nc:
                     torch.cuda.synchronize()
                     err = float((o.float() - ref).norm() / ref.norm().clamp(min=1e-30))
                 else:
                     err = 0.0
-                t = timed(lambda: _kernel_stream(data, state, t1, t2, stages))
+                t = timed(lambda: _kernel_stream(data, state, t1, t2, stages, nc))
                 return t, err
             except Exception as e:
                 print(f"  bs {bs} {t1} {t2} FAILED {repr(e)[:160]}", flush=True)
                 return 1e9, 1.0
 
-        d2 = (1, 8, 4, 16)
+        d2 = (1, 8, 3, 32)
         g1 = []
         for nt in nts:
             for (nw, st, tps) in V27_TUNES:
@@ -233,19 +235,23 @@ def _v27_diag(state):
         tg1, _ = run(best1, best2, 2)
         trp, _ = run(best1, best2, 1)
         tb = g2[0][0]
+        nc1, _ = run(best1, best2, 2, 1)
+        nc2, _ = run(best1, best2, 3, 1)
         bw1 = touched * EXP * 2 / 3 / max(tg1 - trp, 1e-3) / 1e6
         bw2 = touched * EXP / 3 / max(tb - tg1 - 3.0, 1e-3) / 1e6
         print(f"bs {bs}: experts {touched}, v26e {t26:.1f} us | v27 best {tb:.1f} us {best1} {best2} e{g2[0][1]:.1e}"
-              f" | route_prep {trp:.1f}, +G1 {tg1:.1f} (~{bw1:.2f} TB/s G1, ~{bw2:.2f} TB/s G2 est)", flush=True)
+              f" | route_prep {trp:.1f}, +G1 {tg1:.1f} (~{bw1:.2f} TB/s G1, ~{bw2:.2f} TB/s G2 est)"
+              f" | NOCOMPUTE: +G1 {nc1:.1f} (~{touched * EXP * 2 / 3 / max(nc1 - trp, 1e-3) / 1e6:.2f} TB/s), all {nc2:.1f}",
+              flush=True)
         print("  G1 tunes: " + "; ".join(f"{c} {t:.1f} e{e:.0e}" for t, e, c in g1), flush=True)
         print("  G2 tunes: " + "; ".join(f"{c} {t:.1f} e{e:.0e}" for t, e, c in g2), flush=True)
         summ.append((bs, t26, tb, best1, best2))
     print("v27d summary (bs: v26e / v27 us, tunes): " + "; ".join(
         f"{b}: {a:.1f} / {c:.1f} {list(t1)} {list(t2)}" for b, a, c, t1, t2 in summ), flush=True)
-    print(f"v27d diag: done in {time.time() - t0:.0f} s", flush=True)
+    print(f"@NAME@ diag: done in {time.time() - t0:.0f} s", flush=True)
 '''
 
-rep("\ndef prepare(weights):", HOST + (DIAGSRC if DIAG else "") + "\n\ndef prepare(weights):")
+rep("\ndef prepare(weights):", HOST + (DIAGSRC.replace("@NAME@", name) if DIAG else "") + "\n\ndef prepare(weights):")
 rep('''        _mod(W2, I // S2, 0, P2, NB, fast).compile()
     torch.cuda.synchronize()
     return st''', '''        _mod(W2, I // S2, 0, P2, NB, fast).compile()

@@ -122,6 +122,9 @@ __device__ __forceinline__ void mma_tile(float (*c)[4], uint4 q, uint2 s, const 
 #define TB (TPS * 576)       // code + scale bytes per half per stage
 #define SB (HALVES * TB)     // stage bytes
 #define MAXSEG 128
+#ifndef NOCOMPUTE
+#define NOCOMPUTE 0  // diagnostic only: consumers skip the dequant + MMAs (pure weight-streaming time; wrong output)
+#endif
 
 // grid: P CTAs (one per SM), block (NW + 1) * 32, dynamic smem: ST * SB + TC * (K + 8) * 2 + NW * HALVES * E * 4
 //   + (2 * ST) * 8. w: codes [32][RBT][K/64][512 B]; sf: scales [32][RBT][K/64][64 B] (RBT = HALVES * N / 16;
@@ -176,15 +179,15 @@ extern "C" __global__ void __launch_bounds__((NW + 1) * 32, 1) moe_stream(
   const long long U = (long long)s_nseg * RP * SPU;
   const long long q0 = U * blockIdx.x / gridDim.x, q1 = U * (blockIdx.x + 1) / gridDim.x;
   const u32 want = s_old + 1u;
+  // stage q -> (segment sg, rowtile p, k-chunk kc), advanced incrementally (no 64-bit div / mod per stage)
+  const long long uq0 = q0 / SPU;
+  const int kcq0 = (int)(q0 - uq0 * SPU), pq0 = (int)(uq0 % RP), sgq0 = (int)(uq0 / RP);
   if (warp == NW) {  // producer
     if (lane == 0) {
       u64 pol;
       asm volatile("createpolicy.fractional.L2::evict_first.b64 %0, 1.0;" : "=l"(pol));
-      int it = 0;
+      int it = 0, kc = kcq0, p = pq0, sg = sgq0;
       for (long long q = q0; q < q1; ++q, ++it) {
-        const int kc = (int)(q % SPU);
-        const long long u = q / SPU;
-        const int p = (int)(u % RP), sg = (int)(u / RP);
         const int ex = s_ex[sg];
         const int s = it % ST;
         if (it >= ST) mbar_wait(empty + s, (u32)((it / ST) - 1) & 1u);
@@ -195,6 +198,10 @@ extern "C" __global__ void __launch_bounds__((NW + 1) * 32, 1) moe_stream(
           const size_t t0 = ((size_t)ex * RBT + h * RP + p) * KB + (size_t)kc * TPS;  // first tile of this stage
           bulk_ef(dst + h * TPS * 512, w + t0 * 512, TPS * 512, full + s, pol);
           bulk_ef(dst + HALVES * TPS * 512 + h * TPS * 64, sf + t0 * 64, TPS * 64, full + s, pol);
+        }
+        if (++kc == SPU) {
+          kc = 0;
+          if (++p == RP) { p = 0; ++sg; }
         }
       }
     }
@@ -211,11 +218,16 @@ extern "C" __global__ void __launch_bounds__((NW + 1) * 32, 1) moe_stream(
       for (int c = 0; c < 4; ++c) acc[h][j][c] = 0.f;
   int cur = -1;
   bool published = false;
-  int it = 0;
+  int it = 0, kcn = kcq0, pn = pq0, sgn = sgq0;
+  long long un = uq0;
   for (long long q = q0; q < q1; ++q, ++it) {
-    const int kc = (int)(q % SPU);
-    const long long u = q / SPU;
-    const int p = (int)(u % RP), sg = (int)(u / RP);
+    const int kc = kcn, p = pn, sg = sgn;
+    const long long u = un;
+    if (++kcn == SPU) {
+      kcn = 0;
+      ++un;
+      if (++pn == RP) { pn = 0; ++sgn; }
+    }
     const int ex = s_ex[sg];
     if (sg != cur) {  // stage this segment's activation rows (BF16, K wide) once
       if (cur >= 0) bar_consumers();  // everyone is done with the previous rows
@@ -231,7 +243,7 @@ extern "C" __global__ void __launch_bounds__((NW + 1) * 32, 1) moe_stream(
     const int s = it % ST;
     mbar_wait(full + s, (u32)(it / ST) & 1u);
     const unsigned char* st0 = ring + s * SB;
-    for (int i = warp; i < TPS; i += NW) {
+    for (int i = warp; i < (NOCOMPUTE ? 0 : TPS); i += NW) {
       const int kb = kc * TPS + i;
       u32 b0[NT][4], b1[NT][4];
       const u16* xb = xs + g * XSR + 2 * t + kb * 64;

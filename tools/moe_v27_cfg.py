@@ -15,6 +15,6 @@ def valid(cfg, K=4096):
 
 
 # per GEMM: candidate (NW, ST, TPS) tunes
-TUNES = [(8, 4, 16), (8, 6, 16), (8, 3, 32), (8, 4, 32), (8, 8, 8), (4, 4, 16)]
+TUNES = [(8, 4, 16), (8, 3, 32), (8, 4, 32), (16, 3, 32), (16, 4, 32), (8, 2, 64), (16, 2, 64), (16, 3, 64)]
 ALL_CONFIGS = [(g, nt, nw, st, tps) for g in (1, 0) for nt in (1, 2) for (nw, st, tps) in TUNES
                if valid((g, nt, nw, st, tps))]
