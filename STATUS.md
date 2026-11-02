@@ -22,6 +22,35 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Nov 2 ~11:48 AM ET: attention v23 SUBMITTED; records round r14 (branch records-r14)
+
+- Submit **1ca1c9271e304fd8**, muse_attention_decode/runs/v23_fv_addr.py (sha256 8347529bec86eed1..., from main 1005d60,
+  cleared by Senior Larper on #21): **1.478x (CI 1.456-1.500), 16/16**. Attention board 1.385 -> **1.478**.
+  Its check f2fac59291494e89 was 1.486x (1.464-1.508).
+- v22 fresh check **fe141d068e594e14** (Nov 2 10:20 AM ET, v22_cuda_fv.py sha256 d2925cb8..., 6b2ef88): **1.430x (CI 1.4088-1.4559)**,
+  16/16. Its lower bound missed the board's 1.40899 by 0.0002, so v22 was never submitted (superseded by v23).
+- Prefill v3 submit 5bb734959f37453a: 1.115x (CI 1.098-1.132); board 1.088 -> 1.115. Lower bound does not clear 1.105:
+  likely but not proven an improvement.
+- Ranks (fetched Nov 2 2:04 PM ET from openkernelchallenge.dev /api/v1/leaderboard and /api/v1/leaderboard/<problem>;
+  response not committed, so treat as unverified): **overall 925/1872**; attention 896/1266, bf16 1487/1647, decode 875/1195,
+  MoE 891/1319, prefill 693/809 (own board).
+
+v23 caveats (#21 review nits):
+- `CPU maxdiff 0` (tools/tests/attn_cpu_cmp.py) only proves the host / fallback code is unchanged; the CUDA kernel is
+  not exercised on CPU. Its only evidence on sm_90 is the judge's 16/16 runs.
+- The kv_scale GPU half (`ATTN_GPU=1` Part B of tools/tests/attn_v22_fv_kvscale.py) **still has not run on sm_90** (no
+  H100/H200 off the judge). Only the CPU emulation (Part A) has passed.
+- TODO (r14b, review r17 m1): the next attention kernel source (v24+) must add a `"memory"` clobber to the V-transpose's
+  inline ld.shared/st.shared asm. tools/attn_v23_fv.cu is kept at its 1005d60 content so tools/build_attn_v23.py reproduces
+  the submitted runs/v23_fv_addr.py byte-exact (sha256 8347529b..., verified). Measured in r14: with the clobber, under NVRTC
+  12.9 and 13.4 (sm_90a, -std=c++17) the PTX and cubin are **byte-identical** to before (cubin sha256[:16] 8f3ec567... /
+  ec199394...; 120 regs, 0 spill), so the clobber does not change the generated code.
+
+sends.tsv (r14): new `notes` column; INFERRED / UNKNOWN text moved there; UNPARSED(rc=1) and `dedupe` rows annotated;
+16 branch-only check rows (plus the two 8de0e22 rows, now on main via #19) (attn-v16/v18/v19, attn-verify-v1, decode-v14/v15/v19b/v20/v21, prefill-v4/v5) folded in and
+marked, with their profiles copied from the branches (r14b; 639cbea4 has only a .log); the two 8de0e22 rows note that 8de0e22 (decode-v20) is fb7404a in status-r13 (#19). tools/okc_send.py writes the
+8-column format; tools/ledger.py reads it and the send ledger below was regenerated (no longer stale).
+
 ## Oct 31 4:26-5:37 PM ET: attention v22 series, 13 jobs (records for PR #20 review r1 M1; added Nov 2)
 
 These were sent with `okc check` directly, not through tools/okc_send.py, so they had no sends.tsv rows. Their 13
@@ -33,7 +62,7 @@ move (0 bytes)** and are not committed.
 Counting: 12 checks of runs/v22_cuda_fv.py plus 1 diagnostic of runs/v22d_dbg.py (3934b18d) make 13 jobs and 9
 profiles. The review's "12 jobs, 8 with profiles" counts v22_cuda_fv.py only.
 - 8 scored, and b9586ff0 was the best of them.
-- 3 failed correctness. Each was 14/16: tests 5 and 7, the two full-verify b >= 2 tests, failed, so nothing was timed.
+- 3 failed correctness. Each was 14/16: tests 6 and 8 in TASK.md's 1-based numbering (the judge's 0-based "test 5" / "test 7" in the table below), the two full-verify b >= 2 tests, failed, so nothing was timed.
 - 1 was a judge duplicate and did not run.
 
 The PR's earlier "one failed, two diagnostics" was wrong; there was 1 diagnostic and 3 failures. 51a55997 (76c1adc) was the
@@ -42,7 +71,7 @@ V^T head-offset bug fixed in 5039724.
 sha256: okc's `content_hash` is not the file's sha256: for b9586ff0 it is 0021f802..., while the committed file is
 8ee72590..., and the same holds for okc_send-recorded jobs. So the server cannot confirm file hashes. The sha256 values in
 these rows are **inferred** from the file at the commit made in the same second as each send, and marked so in
-sends.tsv. Supporting evidence: every committed job has a distinct content_hash, and the duplicate shares its original's.
+sends.tsv's `notes` column (r14: moved out of the sha256 column, which now holds only a 64-hex sha256 or UNKNOWN). Supporting evidence: every committed job has a distinct content_hash, and the duplicate shares its original's.
 
 Record caveats:
 - **6d90f6e3e9784df6 (5:09:44 PM ET) was sent with no commit at its send time**: none falls between 6f46165
@@ -101,9 +130,13 @@ Review fixes (branch attn-v22, after merging origin/main a1860cc):
   in the per-head RMSNorm, so v_scale is only checked structurally. Part B (`ATTN_GPU=1`, sm_90 only) runs the real
   CUDA path, asserts it was taken, and replays it in a CUDA graph; it has NOT run yet (no H100/H200 off the judge).
 - Nit: `/tmp/attn_cmp19.py` replaced by `tools/tests/attn_cpu_cmp.py`: v20b vs v22 CPU outputs and new cache rows
-  byte-identical on 9 cases (maxdiff 0).
+  byte-identical on 9 cases (maxdiff 0). This runs on CPU, where the CUDA kernel is never taken, so it only proves the
+  host / fallback code is unchanged; it says nothing about the sm_90 CUDA kernel.
 - CPU interpreter localtest (`tools/localtest_attn.py` on v22): every case fails only the new-cache 8% check, identically
-  for the old (8ee72590) and new builds: the Triton 3.9 interpreter's fp32 -> E4M3 cast bug (r6 n2 caveat above), not v22.
+  for the old (8ee72590) and new builds: the Triton 3.9 interpreter's fp32 -> E4M3 cast bug (r6 n2 caveat, in the attention fused-store section below), not v22.
+  Triton caveat: the interpreter's fp32 -> E4M3 cast can drop the carry into the exponent in some binades (e.g. 1.9375 -> 1.0, 7.75 -> 4.0;
+  3.875 -> 4.0 and 15.5 -> 16.0 are correct) and rounds ties away from even (1.0625 -> 1.125), so
+  CPU-interpreter new-cache failures are not evidence against a kernel; only the H200 judge's check is.
 - Offline Triton sm_90 harness (`SM90_GPU_TYPES=1 tools/tests/triton_sm90_compile.py runs/v22_cuda_fv.py`, run from
   muse_attention_decode/): 0 compile failures.
 
@@ -744,47 +777,120 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 
 ## Send ledger (generated by tools/ledger.py from sends.tsv; times ET)
 
-| time | job | problem | kind | file | sha256[:16] (at send) | commit | judge |
-|---|---|---|---|---|---|---|---|
-| 2026-10-28 18:21:14 | cdfb626e97b84cc8 | muse_moe_w4a16 | submit | v9_postnorm_fused.py | 76bb16baff1fe0a6 | 895ab18 | pending (profile not saved) |
-| 2026-10-28 19:43:36 | d1c5ffc5c3eb4cee | muse_moe_w4a16 | submit | v9b_resubmit.py | 387a465e9857920f | 22a1a54 | 1.270x (1.251-1.289), passed=True |
-| 2026-10-28 19:44:08 | 1c3e09378cc0443a | muse_bf16_proj | check | v7_audit_nits.py | 95340c7e18ff1893 | 3a9173d | 1.120x (1.103-1.137), passed=True |
-| 2026-10-28 19:44:08 | 85e6332651ba4603 | muse_attention_decode | check | v11_smooth_split.py | b832f2f431b7f56f | 3a9173d | 1.112x (1.095-1.128), passed=True |
-| 2026-10-28 19:44:08 | e41c3583fe974851 | muse_decode_layer | check | v7_smooth_split.py | c96fc78c5993d0b8 | 3a9173d | 1.187x (1.169-1.204), passed=True |
-| 2026-10-28 22:22:28 | 86a42f76b1164863 | muse_attention_decode | check | v12_nearest_pow2.py | f8a23d04bcfa890c | 52ea71e | 1.115x (1.098-1.131), passed=True |
-| 2026-10-28 22:22:28 | 9f1742cea00f4460 | muse_decode_layer | check | v8_nearest_pow2.py | ea3b88086cdef7e8 | 52ea71e | 1.193x (1.175-1.211), passed=True |
-| 2026-10-28 22:45:11 | 16374f95f195436b | muse_moe_w4a16 | check | v11_triton_packed.py | c0e08e1d71d9766b | e4b1f3d | 0.545x (0.537-0.554), passed=True |
-| 2026-10-28 22:54:47 | 698ae1d5cbd94a3a | muse_moe_w4a16 | check | v12_splitk.py | 0da91269b409c323 | 19dd489 | 0.510x (0.503-0.518), passed=True |
-| 2026-10-28 23:09:44 | e57901fe9def4655 | muse_moe_w4a16 | check | v14_slots.py | 26e907cd7893c3fe | 4b21850 | 0.578x (0.570-0.587), passed=True |
-| 2026-10-28 23:14:56 | 4b804f6c561745bf | muse_moe_w4a16 | check | v15_tiled.py | 5e50df5e78914e6a | 4e3722f | 0.723x (0.712-0.734), passed=True |
-| 2026-10-28 23:21:57 | 603e1fdbeed64cac | muse_moe_w4a16 | check | v16_persistent.py | 2287485b0d44be2f | 7f99677 | 0.722x (0.711-0.745), passed=True |
-| 2026-10-28 23:28:02 | c8a9842f36014fa0 | muse_moe_w4a16 | check | v17_occupancy.py | 803518baac5982e1 | ef39c26 | 0.725x (0.714-0.736), passed=True |
-| 2026-10-28 23:34:11 | 3a7c57476d824e80 | muse_bf16_proj | check | v8_streamk.py | b28ab5344a71cb57 | 7f9e21c | 1.061x (1.045-1.077), passed=True |
-| 2026-10-28 23:52:17 | a31e7fe5dd184d13 | muse_bf16_proj | check | v9_zk.py | 59cb50e935a0e206 | cfc51b3 | 0.727x (0.716-0.738), passed=True |
-| 2026-10-29 00:08:07 | 633e5dfd0b494aa0 | muse_bf16_proj | check | v10_zk_occ.py | 79202623e5513664 | 6bd49df | 0.769x (0.758-0.781), passed=True |
-| 2026-10-29 00:33:05 | a428ce02220746c9 | muse_moe_w4a16 | check | v18_gemv.py | eecc105961109dcd | 4c87f91 | 0.577x (0.568-0.585), passed=True |
-| 2026-10-29 00:45:37 | e99c9700c7754496 | muse_moe_w4a16 | check | v19_gemv_rows.py | 1c0d4b62ca9b34a9 | c4a9c23 | 0.220x (0.216-0.223), passed=True |
-| 2026-10-29 00:50:26 | ae407efff6954988 | muse_bf16_proj | check | v11_cublas_bench.py | 487fb61c7bb3b01c | a084f61 | 1.132x (1.115-1.149), passed=True |
-| 2026-10-29 00:52:00 | b8e3f1ba63b044c5 | muse_bf16_proj | check | v12_bench_probe.py | d6695652c63c6fea | 87356d4 | 1.127x (1.110-1.144), passed=True |
-| 2026-10-29 00:56:41 | 8b24db54101e43dd | muse_moe_w4a16 | check | v20_cuda_gemv.py | 74ea274de62746c6 | 229448f | 0.902x (0.888-0.915), passed=True |
-| 2026-10-29 01:02:55 | 953f0d3cecdd42c1 | muse_moe_w4a16 | check | v21_mma.py | e3dab931aff74a55 | 0d353d4 | 1.046x (1.030-1.062), passed=True |
-| 2026-10-29 01:05:44 | ed185d25d2834988 | muse_moe_w4a16 | check | v22_mma_pf.py | 5f18b181ebebc738 | 7a268e2 | 1.100x (1.084-1.117), passed=True |
-| 2026-10-29 01:10:40 | b109e9378bc14d66 | muse_moe_w4a16 | check | v23_scale_nb.py | b851c2463208b408 | edb8de9 | 1.325x (1.305-1.345), passed=True |
-| 2026-10-29 01:12:07 | d66cab4599544266 | muse_moe_w4a16 | check | v24_tuned.py | 9cba0e2bb6a650d8 | 628e860 | 1.376x (1.356-1.397), passed=True |
-| 2026-10-29 01:16:38 | cdcf4c435dce475a | muse_bf16_proj | check | v13_cuda_gemv.py | 6f48f700322f488c | 03a51f6 | pending (profile not saved) |
-| 2026-10-29 01:18:19 | ee8f8ee6204d4b78 | muse_bf16_proj | check | v14_route.py | 45a6b07a07fa7bf7 | a7ee222 | 1.109x (1.092-1.125), passed=True |
-| 2026-10-29 01:21:10 | e2894d15903941b8 | muse_bf16_proj | check | v15_cpasync.py | 8f52465c334fec20 | 61a50e9 | 0.681x (0.671-0.691), passed=True |
-| 2026-10-29 01:23:08 | 693c8d31f9134635 | muse_bf16_proj | check | v16_l2pf.py | b1f4f0190cc44832 | 515afa4 | 1.009x (0.994-1.024), passed=True |
-| 2026-10-29 01:24:37 | febf8e4adb9c4e1a | muse_bf16_proj | check | v17_best_route.py | 9f56573b6e19ab58 | 8d34c13 | 1.133x (1.116-1.150), passed=True |
-| 2026-10-29 01:26:41 | 14ba8a134b084788 | muse_bf16_proj | check | v18_dbuf.py | 7b8931a7ca240b66 | e8d5883 | 1.062x (1.046-1.078), passed=True |
-| 2026-10-29 01:29:24 | 62ed09f29fd74783 | muse_decode_layer | check | v9_moe_cuda.py | 02e16cae04881ead | d63231f | 1.219x (1.200-1.237), passed=True |
-| 2026-10-29 01:32:33 | d761340c8ec04009 | muse_decode_layer | check | v10_route.py | 769b1e5f6b700466 | dd570f2 | 1.243x (1.225-1.262), passed=True |
-| 2026-10-29 01:34:10 | d625bb2af63b43c1 | muse_moe_w4a16 | submit | v24_tuned.py | 9cba0e2bb6a650d8 | dd570f2 | 1.380x (1.359-1.401), passed=True |
-| 2026-10-29 01:34:57 | 4e2d567c86e84404 | muse_decode_layer | check | v11_rmsnorm_all.py | 4db52119f88eda1e | ea3b527 | 1.234x (1.216-1.253), passed=True |
-| 2026-10-29 01:37:27 | ff2c439e12e54f31 | muse_decode_layer | check | v12_precompile.py | b934cc00c842f1c2 | c4c326c | 1.247x (1.229-1.266), passed=True |
-| 2026-10-29 01:42:33 | ed743d60bec04ad8 | muse_attention_decode | check | v13_fused_store.py | 946f38729b14889d | a152f37 | 1.243x (1.224-1.261), passed=True |
-| 2026-10-29 01:48:32 | ad626ebbafd94cbb | muse_attention_decode | check | v14_fp8q.py | e893f8b43b7cf33a | 4047bb7 | 1.325x (1.305-1.345), passed=True |
-| 2026-10-29 01:54:42 | b35042c212354b1f | muse_decode_layer | submit | v12_precompile.py | b934cc00c842f1c2 | f2c065f | 1.246x (1.227-1.264), passed=True |
-| 2026-10-29 02:16:03 | efe18d6e4b8c4fe3 | muse_attention_decode | submit | v14b_docfix.py | f9b4b6409ce588ea | 77808d1 | 1.317x (1.297-1.336), passed=True |
-| 2026-10-29 02:23:06 | 8ddcc64985b5474e | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 926c76a | 1.278x (1.259-1.298), passed=True |
-| 2026-10-29 02:25:43 | 9a588099434d407f | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 7675026 | pending (profile not saved) |
+| time | job | problem | kind | file | sha256[:16] (at send) | commit | judge | notes |
+|---|---|---|---|---|---|---|---|---|
+| 2026-10-28 18:21:14 | cdfb626e97b84cc8 | muse_moe_w4a16 | submit | v9_postnorm_fused.py | 76bb16baff1fe0a6 | 895ab18 | pending (profile not saved) |  |
+| 2026-10-28 19:43:36 | d1c5ffc5c3eb4cee | muse_moe_w4a16 | submit | v9b_resubmit.py | 387a465e9857920f | 22a1a54 | 1.270x (1.251-1.289), passed=True |  |
+| 2026-10-28 19:44:08 | 1c3e09378cc0443a | muse_bf16_proj | check | v7_audit_nits.py | 95340c7e18ff1893 | 3a9173d | 1.120x (1.103-1.137), passed=True |  |
+| 2026-10-28 19:44:08 | 85e6332651ba4603 | muse_attention_decode | check | v11_smooth_split.py | b832f2f431b7f56f | 3a9173d | 1.112x (1.095-1.128), passed=True |  |
+| 2026-10-28 19:44:08 | e41c3583fe974851 | muse_decode_layer | check | v7_smooth_split.py | c96fc78c5993d0b8 | 3a9173d | 1.187x (1.169-1.204), passed=True |  |
+| 2026-10-28 22:22:28 | 86a42f76b1164863 | muse_attention_decode | check | v12_nearest_pow2.py | f8a23d04bcfa890c | 52ea71e | 1.115x (1.098-1.131), passed=True |  |
+| 2026-10-28 22:22:28 | 9f1742cea00f4460 | muse_decode_layer | check | v8_nearest_pow2.py | ea3b88086cdef7e8 | 52ea71e | 1.193x (1.175-1.211), passed=True |  |
+| 2026-10-28 22:45:11 | 16374f95f195436b | muse_moe_w4a16 | check | v11_triton_packed.py | c0e08e1d71d9766b | e4b1f3d | 0.545x (0.537-0.554), passed=True |  |
+| 2026-10-28 22:54:47 | 698ae1d5cbd94a3a | muse_moe_w4a16 | check | v12_splitk.py | 0da91269b409c323 | 19dd489 | 0.510x (0.503-0.518), passed=True |  |
+| 2026-10-28 23:09:44 | e57901fe9def4655 | muse_moe_w4a16 | check | v14_slots.py | 26e907cd7893c3fe | 4b21850 | 0.578x (0.570-0.587), passed=True |  |
+| 2026-10-28 23:14:56 | 4b804f6c561745bf | muse_moe_w4a16 | check | v15_tiled.py | 5e50df5e78914e6a | 4e3722f | 0.723x (0.712-0.734), passed=True |  |
+| 2026-10-28 23:21:57 | 603e1fdbeed64cac | muse_moe_w4a16 | check | v16_persistent.py | 2287485b0d44be2f | 7f99677 | 0.722x (0.711-0.745), passed=True |  |
+| 2026-10-28 23:28:02 | c8a9842f36014fa0 | muse_moe_w4a16 | check | v17_occupancy.py | 803518baac5982e1 | ef39c26 | 0.725x (0.714-0.736), passed=True |  |
+| 2026-10-28 23:34:11 | 3a7c57476d824e80 | muse_bf16_proj | check | v8_streamk.py | b28ab5344a71cb57 | 7f9e21c | 1.061x (1.045-1.077), passed=True |  |
+| 2026-10-28 23:52:17 | a31e7fe5dd184d13 | muse_bf16_proj | check | v9_zk.py | 59cb50e935a0e206 | cfc51b3 | 0.727x (0.716-0.738), passed=True |  |
+| 2026-10-29 00:08:07 | 633e5dfd0b494aa0 | muse_bf16_proj | check | v10_zk_occ.py | 79202623e5513664 | 6bd49df | 0.769x (0.758-0.781), passed=True |  |
+| 2026-10-29 00:33:05 | a428ce02220746c9 | muse_moe_w4a16 | check | v18_gemv.py | eecc105961109dcd | 4c87f91 | 0.577x (0.568-0.585), passed=True |  |
+| 2026-10-29 00:45:37 | e99c9700c7754496 | muse_moe_w4a16 | check | v19_gemv_rows.py | 1c0d4b62ca9b34a9 | c4a9c23 | 0.220x (0.216-0.223), passed=True |  |
+| 2026-10-29 00:50:26 | ae407efff6954988 | muse_bf16_proj | check | v11_cublas_bench.py | 487fb61c7bb3b01c | a084f61 | 1.132x (1.115-1.149), passed=True |  |
+| 2026-10-29 00:52:00 | b8e3f1ba63b044c5 | muse_bf16_proj | check | v12_bench_probe.py | d6695652c63c6fea | 87356d4 | 1.127x (1.110-1.144), passed=True |  |
+| 2026-10-29 00:56:41 | 8b24db54101e43dd | muse_moe_w4a16 | check | v20_cuda_gemv.py | 74ea274de62746c6 | 229448f | 0.902x (0.888-0.915), passed=True |  |
+| 2026-10-29 01:02:55 | 953f0d3cecdd42c1 | muse_moe_w4a16 | check | v21_mma.py | e3dab931aff74a55 | 0d353d4 | 1.046x (1.030-1.062), passed=True |  |
+| 2026-10-29 01:05:44 | ed185d25d2834988 | muse_moe_w4a16 | check | v22_mma_pf.py | 5f18b181ebebc738 | 7a268e2 | 1.100x (1.084-1.117), passed=True |  |
+| 2026-10-29 01:10:40 | b109e9378bc14d66 | muse_moe_w4a16 | check | v23_scale_nb.py | b851c2463208b408 | edb8de9 | 1.325x (1.305-1.345), passed=True |  |
+| 2026-10-29 01:12:07 | d66cab4599544266 | muse_moe_w4a16 | check | v24_tuned.py | 9cba0e2bb6a650d8 | 628e860 | 1.376x (1.356-1.397), passed=True |  |
+| 2026-10-29 01:16:38 | cdcf4c435dce475a | muse_bf16_proj | check | v13_cuda_gemv.py | 6f48f700322f488c | 03a51f6 | pending (profile not saved) |  |
+| 2026-10-29 01:18:19 | ee8f8ee6204d4b78 | muse_bf16_proj | check | v14_route.py | 45a6b07a07fa7bf7 | a7ee222 | 1.109x (1.092-1.125), passed=True |  |
+| 2026-10-29 01:21:10 | e2894d15903941b8 | muse_bf16_proj | check | v15_cpasync.py | 8f52465c334fec20 | 61a50e9 | 0.681x (0.671-0.691), passed=True |  |
+| 2026-10-29 01:23:08 | 693c8d31f9134635 | muse_bf16_proj | check | v16_l2pf.py | b1f4f0190cc44832 | 515afa4 | 1.009x (0.994-1.024), passed=True |  |
+| 2026-10-29 01:24:37 | febf8e4adb9c4e1a | muse_bf16_proj | check | v17_best_route.py | 9f56573b6e19ab58 | 8d34c13 | 1.133x (1.116-1.150), passed=True |  |
+| 2026-10-29 01:26:41 | 14ba8a134b084788 | muse_bf16_proj | check | v18_dbuf.py | 7b8931a7ca240b66 | e8d5883 | 1.062x (1.046-1.078), passed=True |  |
+| 2026-10-29 01:29:24 | 62ed09f29fd74783 | muse_decode_layer | check | v9_moe_cuda.py | 02e16cae04881ead | d63231f | 1.219x (1.200-1.237), passed=True |  |
+| 2026-10-29 01:32:33 | d761340c8ec04009 | muse_decode_layer | check | v10_route.py | 769b1e5f6b700466 | dd570f2 | 1.243x (1.225-1.262), passed=True |  |
+| 2026-10-29 01:34:10 | d625bb2af63b43c1 | muse_moe_w4a16 | submit | v24_tuned.py | 9cba0e2bb6a650d8 | dd570f2 | 1.380x (1.359-1.401), passed=True |  |
+| 2026-10-29 01:34:57 | 4e2d567c86e84404 | muse_decode_layer | check | v11_rmsnorm_all.py | 4db52119f88eda1e | ea3b527 | 1.234x (1.216-1.253), passed=True |  |
+| 2026-10-29 01:37:27 | ff2c439e12e54f31 | muse_decode_layer | check | v12_precompile.py | b934cc00c842f1c2 | c4c326c | 1.247x (1.229-1.266), passed=True |  |
+| 2026-10-29 01:42:33 | ed743d60bec04ad8 | muse_attention_decode | check | v13_fused_store.py | 946f38729b14889d | a152f37 | 1.243x (1.224-1.261), passed=True |  |
+| 2026-10-29 01:48:32 | ad626ebbafd94cbb | muse_attention_decode | check | v14_fp8q.py | e893f8b43b7cf33a | 4047bb7 | 1.325x (1.305-1.345), passed=True |  |
+| 2026-10-29 01:54:42 | b35042c212354b1f | muse_decode_layer | submit | v12_precompile.py | b934cc00c842f1c2 | f2c065f | 1.246x (1.227-1.264), passed=True |  |
+| 2026-10-29 02:16:03 | efe18d6e4b8c4fe3 | muse_attention_decode | submit | v14b_docfix.py | f9b4b6409ce588ea | 77808d1 | 1.317x (1.297-1.336), passed=True |  |
+| 2026-10-29 02:23:06 | 8ddcc64985b5474e | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 926c76a | 1.278x (1.259-1.298), passed=True |  |
+| 2026-10-29 02:25:43 | 9a588099434d407f | muse_decode_layer | check | v13_fused_attn.py | 106b7d8773faa722 | 7675026 | pending (profile not saved) |  |
+| 2026-10-29 02:31:44 | 99cd85adb03b464c | muse_bf16_proj | check | v19_large_triton.py | 4b5d75be181d0da7 | 5574e64 | pending (profile not saved) |  |
+| 2026-10-29 02:37:50 | 9e6108c9e3724ee9 | muse_bf16_proj | check | v7_audit_nits.py | 95340c7e18ff1893 | dedupe | pending (profile not saved) | commit field was "dedupe" (pre-ledger dedupe resend); commit not recorded |
+| 2026-10-29 02:38:30 | 41a723aa68fe4d79 | muse_bf16_proj | check | v22_router_regime.py | 97a3729b44d0eb0e | b9baa40 | 1.103x (1.087-1.120), passed=True |  |
+| 2026-10-29 02:41:36 | 42f8408fae1a4a8b | muse_bf16_proj | check | v23_tma_bulk.py | 5088ac42b718a957 | 33b8efc | 0.970x (0.955-0.984), passed=True |  |
+| 2026-10-29 02:43:43 | 77cfc7faa257400c | muse_bf16_proj | check | v24_tma_route.py | 0d17aa1222cf3db8 | b5e1897 | 0.970x (0.955-0.985), passed=True |  |
+| 2026-10-29 02:44:06 | 093c2ebc301344e8 | muse_decode_layer | submit | v13_fused_attn.py | 106b7d8773faa722 | b5e1897 | 1.251x (1.233-1.270), passed=True |  |
+| 2026-10-29 02:46:00 | 1d169b463f4e4dd0 | muse_bf16_proj | check | v25_tma_rt.py | 1e189d884dc7d6c4 | 29aa40f | 0.796x (0.784-0.808), passed=True |  |
+| 2026-10-29 02:47:55 | cd0ad18a7e114069 | muse_bf16_proj | check | v26_v17_tma_m1.py | a6b1535d1dd65842 | 5cadffa | 1.124x (1.107-1.141), passed=True |  |
+| 2026-10-29 03:12:11 | 0d61ab04212b4916 | muse_moe_w4a16 | check | v25_scale_pair.py | ccc23454c8463169 | 2541555 | 1.285x (1.266-1.308), passed=True |  |
+| 2026-10-29 03:23:20 | 843d33d84aa34786 | muse_moe_w4a16 | check | v25b_fold_fill.py | c38267b1b940d906 | 5cdb8f9 | 1.391x (1.370-1.412), passed=True |  |
+| 2026-10-29 03:27:29 | 28ad328cf5284948 | muse_attention_decode | check | v15a_verify_split.py | 499fe7a8007ad498 | 4abfe28 | 1.232x (1.214-1.251), passed=True |  |
+| 2026-10-29 03:33:44 | ab5f387ae32242ba | muse_attention_decode | check | v15b_verify_route.py | 2196e01c425bce7c | 616fb66 | 1.376x (1.355-1.396), passed=True |  |
+| 2026-10-29 03:41:11 | 4ab6d497f55d4908 | muse_decode_layer | check | v14_verify_split.py | f3e6c9e309462024 | 876f997 | 1.278x (1.259-1.297), passed=True | branch-only record, folded in r14 from decode-v14,decode-v15; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 03:45:22 | 75b0321a5df9459d | muse_decode_layer | check | v15a_moe_bench.py | 9552ad356ed40c2b | a7aa618 | 1.281x (1.262-1.300), passed=True | branch-only record, folded in r14 from decode-v15; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 03:48:21 | 9f9021db0ad24f79 | muse_decode_layer | check | v15b_moe32.py | 1a77cb2b538be165 | eb6a018 | 1.259x (1.240-1.278), passed=True | branch-only record, folded in r14 from decode-v15; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 03:51:05 | 8f7ac0501b5849d7 | muse_attention_decode | submit | v15b_verify_route.py | 2196e01c425bce7c | 5ced66c | 1.385x (1.364-1.409), passed=True |  |
+| 2026-10-29 03:58:46 | 3914e9a2ce234492 | muse_attention_decode | check | v16a_fullverify.py | 9e646b05bd0696df | f6b6bb3 | 1.179x (1.161-1.197), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:05:24 | 0e7a5ed370284884 | muse_attention_decode | check | v16b_fullverify.py | ba5539291c432d52 | b299381 | 1.286x (1.267-1.310), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:07:43 | d97b56e20552413e | muse_attention_decode | check | v16c_pair.py | cf60fd09b180cdcc | 036ea05 | 1.135x (1.118-1.156), passed=True | branch-only record, folded in r14 from attn-v16; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 04:19:24 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc rc=1, no job id; no judge job exists for this send |
+| 2026-10-29 04:19:39 | UNPARSED(rc=1) | muse_bf16_proj | check | v27_wgmma.py | 1194b4c2b927538d | eda33bf | pending (profile not saved) | okc rc=1, no job id; no judge job exists for this send |
+| 2026-10-29 04:20:08 | 9f218bc6dfb54dce | muse_bf16_proj | check | v27_wgmma.py | 5f4e121fe22e8f18 | 4e2b975 | pending (profile not saved) |  |
+| 2026-10-29 04:21:02 | ca0ac29de0c347d8 | muse_bf16_proj | check | v27_wgmma.py | fcc4113c87b5492f | f311bfb | 0.927x (0.913-0.941), passed=True |  |
+| 2026-10-29 04:29:40 | c20bde96ace6489d | muse_bf16_proj | check | v28_wgmma_pipe.py | 3613a8dee3e8c123 | cd5a674 | 0.915x (0.901-0.928), passed=True |  |
+| 2026-10-29 04:38:35 | bbebbbdf181f4934 | muse_moe_w4a16 | check | v26a_int_splat.py | 196c6708eb8b18fc | 05d6779 | 1.457x (1.435-1.479), passed=True |  |
+| 2026-10-29 04:41:57 | b94ed32acfce4452 | muse_decode_layer | check | v16_int_splat.py | a1057a4381c2abd5 | 7bdc9bc | 1.289x (1.270-1.309), passed=True |  |
+| 2026-10-29 04:49:09 | f479a34c48984e24 | muse_moe_w4a16 | check | v26c_fused_chain.py | 85fe5e71ccae07e1 | 8bd9599 | 1.497x (1.474-1.519), passed=True |  |
+| 2026-10-29 04:54:09 | 5dbee2e16e3741f9 | muse_decode_layer | check | v17_fused_chain.py | 67dbbe1470a875d4 | 617b28c | 1.333x (1.313-1.353), passed=True |  |
+| 2026-10-29 05:03:00 | 7eaa9622f391455b | muse_moe_w4a16 | submit | v26c_fused_chain.py | 85fe5e71ccae07e1 | 377f1f0 | 1.500x (1.478-1.523), passed=True |  |
+| 2026-10-29 05:03:06 | 6a55705a372f40ac | muse_decode_layer | submit | v17_fused_chain.py | 67dbbe1470a875d4 | 71a8c73 | 1.318x (1.298-1.337), passed=True |  |
+| 2026-10-29 14:40:13 | 9566de62f7e94ed1 | muse_decode_layer | check | v18_cuda_experts_256.py | 83189386fda66df4 | 9bd11b9 | 1.333x (1.313-1.353), passed=True |  |
+| 2026-10-29 14:43:14 | ae89a962123748e6 | muse_decode_layer | check | v18b_cuda_experts_192.py | 1224fd4fbc0d6d16 | 8e01dcf | 1.328x (1.308-1.348), passed=True |  |
+| 2026-10-29 14:48:38 | b8a324016b7b4422 | muse_moe_w4a16 | check | v26e_nb2_evict.py | 31a3254249dfa680 | 252697a | 1.546x (1.523-1.569), passed=True |  |
+| 2026-10-29 14:59:39 | 94cff1d839e947df | muse_moe_w4a16 | submit | v26e_nb2_evict.py | 31a3254249dfa680 | cde1698 | 1.539x (1.516-1.562), passed=True |  |
+| 2026-10-29 15:03:44 | e09cfcf550ab476e | muse_prefill_layer | check | v1_router_fused.py | 957484e686464886 | 8dc446d | 1.003x (0.988-1.018), passed=True |  |
+| 2026-10-29 15:09:26 | e855efdd22b847af | muse_prefill_layer | check | v2_dequant_grouped.py | f00bf46b23a6f01e | 80ec2f4 | pending (profile not saved) |  |
+| 2026-10-29 15:11:02 | b007869e4f7e48ef | muse_prefill_layer | check | v2_dequant_grouped.py | a50a6821ea21d13e | 1125f74 | 1.013x (0.998-1.028), passed=True |  |
+| 2026-10-29 15:15:32 | 08475fbb90c34f16 | muse_prefill_layer | check | v2b_dequant_grouped.py | d0b2cc111752af14 | 7114f67 | 1.090x (1.074-1.107), passed=True |  |
+| 2026-10-29 15:21:43 | b7acb3f79b594fc7 | muse_decode_layer | check | v19_nb2_256_evict.py | d70c6c3ebea2f611 | b91650d | 1.358x (1.338-1.378), passed=True |  |
+| 2026-10-29 15:25:08 | e27dac5ab7d24e63 | muse_decode_layer | check | v19b_nb2_minb2.py | 35f2508ecc7370f1 | 079a320 | 1.355x (1.334-1.375), passed=True | branch-only record, folded in r14 from decode-v19b; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 15:33:01 | 9f59e5963dd740bd | muse_attention_decode | check | v16_verify_fused.py | 22101bf265eda1ef | a17702d | 1.253x (1.234-1.272), passed=True | branch-only record, folded in r14 from attn-verify-v1; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 15:41:57 | 7b69b2fcfffb40dd | muse_prefill_layer | submit | v2b_dequant_grouped.py | d0b2cc111752af14 | 99e0c27 | 1.088x (1.072-1.105), passed=True |  |
+| 2026-10-29 15:42:03 | 7702cb83b35b4737 | muse_decode_layer | submit | v19_nb2_256_evict.py | d70c6c3ebea2f611 | 1e4fd5c | 1.364x (1.344-1.385), passed=True |  |
+| 2026-10-29 15:49:19 | 5fa280a493f244a3 | muse_decode_layer | check | v20_rows_prefetch.py | eddbb3dc9261f21f | 8de0e22 | 1.366x (1.345-1.386), passed=True | 8de0e22 is on branch decode-v20; patch-identical to fb7404a (main via #19) and 5fba370 (main via #20) |
+| 2026-10-29 15:49:20 | 8deec285efbe4b57 | muse_attention_decode | check | v17_rows_prefetch.py | 7b07723ccbdd55b2 | 8de0e22 | 1.398x (1.377-1.424), passed=True | 8de0e22 is on branch decode-v20; patch-identical to fb7404a (main via #19) and 5fba370 (main via #20) |
+| 2026-10-29 15:57:17 | efae26e3adb24c0f | muse_prefill_layer | check | v3_gs_after_local.py | 4ad330b5f85597e0 | 3618d85 | 1.122x (1.106-1.139), passed=True |  |
+| 2026-10-29 16:04:45 | 639cbea473a548e1 | muse_attention_decode | check | v18_head_merge.py | af176d7deb57c9d5 | 7b5d0c1 | pending (profile not saved) | branch-only record, folded in r14 from attn-v18; commit not on main; only the .log profile exists on the branch (r14b) |
+| 2026-10-29 16:05:29 | 04328d59e9dc4916 | muse_prefill_layer | check | v4_dequant_rows4.py | ab987df2008bb9dd | 7b44294 | 1.108x (1.091-1.124), passed=True | branch-only record, folded in r14 from prefill-v4; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:07:06 | dc0ff5481e264763 | muse_attention_decode | check | v18_head_merge.py | c652e4646da7945c | e8dadfc | 1.061x (1.045-1.077), passed=True | branch-only record, folded in r14 from attn-v18; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:21:43 | 3b5207bbc0d042c8 | muse_attention_decode | check | v19_tok_norm.py | d2c08d3eaa046316 | eb73ccf | 1.366x (1.346-1.387), passed=True | branch-only record, folded in r14 from attn-v19; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:31:01 | 3d618fc619024323 | muse_attention_decode | check | v19b_tok_launch.py | 13f344720bdbb9da | 9548c6a | 1.395x (1.374-1.416), passed=True | branch-only record, folded in r14 from attn-v19; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:31:01 | 4df36a668b5f47b4 | muse_prefill_layer | check | v5_dequant_persist.py | 4ecdb442eee4ec5e | bc292f4 | 1.119x (1.102-1.135), passed=True | branch-only record, folded in r14 from prefill-v5; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 16:47:41 | 77bcf164955a4ca3 | muse_attention_decode | check | v20_verify_tiles.py | 727ad971fbb73bf7 | d6bf3b4 | 1.394x (1.373-1.415), passed=True |  |
+| 2026-10-29 16:54:22 | 278e0857f453409b | muse_attention_decode | check | v20b_verify_pref64.py | 27bdf39031d87872 | 8feba1b | 1.406x (1.385-1.433), passed=True |  |
+| 2026-10-29 20:35:41 | 88fc246e84084275 | muse_attention_decode | check | v21_verify_w8.py | ca52540959a3e395 | db57e78 | 1.367x (1.346-1.387), passed=True | branch-only record, folded in r14 from decode-v21; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-29 20:50:06 | af008940f4444134 | muse_decode_layer | check | v21_attn_v20b.py | 527180dbb92acf10 | 0fbbaa1 | 1.360x (1.340-1.380), passed=True | branch-only record, folded in r14 from decode-v21; commit not on main; profiles copied from branch (r14b) |
+| 2026-10-31 16:26:20 | b0d7d09101e64fd2 | muse_attention_decode | check | v22_cuda_fv.py | e342863dea6df20b | 179fdd4 | 1.254x (1.235-1.273), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 16:34:54 | 6939558c645240ab | muse_attention_decode | check | v22_cuda_fv.py | 7edd8df2632efa5a | 93a54cb | 1.267x (1.248-1.291), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 16:44:02 | 833763a0bb304f7b | muse_attention_decode | check | v22_cuda_fv.py | 678d5157d9e48721 | dceb08d | pending (profile not saved) | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 16:46:38 | 3934b18d3d704157 | muse_attention_decode | check | v22d_dbg.py | UNKNOWN | uncommitted | 1.337x (1.317-1.357), passed=True | file never committed; okc content_hash f9d0b032dbdd3e79 |
+| 2026-10-31 16:52:56 | c8500ee5eeb04de7 | muse_attention_decode | check | v22_cuda_fv.py | cf6f5171d743909f | 3f0c0d5 | pending (profile not saved) | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 16:58:47 | defbcb21ce084f78 | muse_attention_decode | check | v22_cuda_fv.py | 29b2f0dbf2e74097 | d300793 | 1.368x (1.347-1.388), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:05:29 | 469a11daeb4749bb | muse_attention_decode | check | v22_cuda_fv.py | 3803fdbfc85055a3 | 6f46165 | 1.381x (1.360-1.402), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:09:44 | 6d90f6e3e9784df6 | muse_attention_decode | check | v22_cuda_fv.py | 3803fdbfc85055a3 | uncommitted | pending (profile not saved) | INFERRED: okc duplicate of 469a11daeb4749bb, same content_hash |
+| 2026-10-31 17:13:19 | 87d219d56a4d4a6d | muse_attention_decode | check | v22_cuda_fv.py | e69822940d7cf820 | 10575fb | 1.423x (1.401-1.444), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:19:52 | 7a98fe19e6294071 | muse_attention_decode | check | v22_cuda_fv.py | 2e7e9ea5901ef4b4 | 7c77e6b | 1.368x (1.348-1.389), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:27:07 | 23257bf83b0e4dbd | muse_attention_decode | check | v22_cuda_fv.py | 95149a603ba37f3a | b5a17a6 | 1.415x (1.394-1.436), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:34:05 | 51a559973ef14097 | muse_attention_decode | check | v22_cuda_fv.py | 205daea8a3f05154 | 76c1adc | pending (profile not saved) | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-10-31 17:36:32 | b9586ff0a9db47f0 | muse_attention_decode | check | v22_cuda_fv.py | 8ee72590baa893fc | 5039724 | 1.433x (1.412-1.460), passed=True | INFERRED from same-second commit; okc exposes only content_hash |
+| 2026-11-02 10:09:19 | 5bb734959f37453a | muse_prefill_layer | submit | v3_gs_after_local.py | 4ad330b5f85597e0 | a1860cc | 1.115x (1.098-1.132), passed=True |  |
+| 2026-11-02 10:20:20 | fe141d068e594e14 | muse_attention_decode | check | v22_cuda_fv.py | d2925cb84321faea | 6b2ef88 | 1.430x (1.409-1.456), passed=True |  |
+| 2026-11-02 10:42:36 | f2fac59291494e89 | muse_attention_decode | check | v23_fv_addr.py | 8347529bec86eed1 | 99d1fef | 1.486x (1.464-1.508), passed=True |  |
+| 2026-11-02 11:47:58 | 1ca1c9271e304fd8 | muse_attention_decode | submit | v23_fv_addr.py | 8347529bec86eed1 | 1005d60 | 1.478x (1.456-1.500), passed=True |  |
