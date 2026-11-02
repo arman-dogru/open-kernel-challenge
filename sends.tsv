@@ -117,3 +117,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit	notes
 2026-11-02 14:48:49	check	a894ff98f9d14c19	muse_attention_decode	muse_attention_decode/runs/v24_rows_occ4.py	b60eca17974b936a73d6db5d3fe49e51c97ac54c704df2992f66a308b4a6e209	308faad	
 2026-11-02 15:47:33	check	4a3290c5bb6b402b	muse_moe_w4a16	muse_moe_w4a16/runs/v27d_bench.py	ac775a3023d3f0740e8ac665add41b15db9cd0e345d43659295631998f544e78	ef53f92	
 2026-11-02 15:57:08	check	a27cf0800163460d	muse_moe_w4a16	muse_moe_w4a16/runs/v27d2_bench.py	21e0432dc773ac2202fe278775600abe4f257fe41bba49a7eb08d27b4a8cc8f0	26ebbe5	
+2026-11-02 16:04:45	check	6acdd124882841c6	muse_moe_w4a16	muse_moe_w4a16/runs/v27d3_bench.py	a8f4b6f211151252e7e6373431311eda2cf626ba8fe2fc2c8b04f1122a819d82	02010e4	
