@@ -92,6 +92,7 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-10-31 17:27:07	check	23257bf83b0e4dbd	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	95149a603ba37f3a47c2d8e3f47a4cf1584d0f1ac02f7a75b3e52fff3bf2ae75(INFERRED from same-second commit; okc exposes only content_hash)	b5a17a6
 2026-10-31 17:34:05	check	51a559973ef14097	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	205daea8a3f05154702404bdf2e3e09fc2d97cae6cacbe1bb0fa94c4650a288b(INFERRED from same-second commit; okc exposes only content_hash)	76c1adc
 2026-10-31 17:36:32	check	b9586ff0a9db47f0	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	8ee72590baa893fcc0ca2ed5df701d44c91e1cb8c302d945d109cebe05693c2d(INFERRED from same-second commit; okc exposes only content_hash)	5039724
+2026-11-02 10:09:19	submit	5bb734959f37453a	muse_prefill_layer	muse_prefill_layer/runs/v3_gs_after_local.py	4ad330b5f85597e096cad9b23fb678dc32bedd53fd6d61f83668fe1a253a55db	a1860cc
 2026-11-02 10:20:20	check	fe141d068e594e14	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	d2925cb84321faeac15c47620687cb9059559445fa92c72dffcfe616d5b89d60	6b2ef88
 2026-11-02 10:42:36	check	f2fac59291494e89	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	99d1fef
 2026-11-02 11:47:58	submit	1ca1c9271e304fd8	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	1005d60
