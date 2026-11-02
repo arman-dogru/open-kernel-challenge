@@ -243,7 +243,9 @@ extern "C" __global__ void __launch_bounds__((NW + 1) * 32, 1) moe_stream(
     const int s = it % ST;
     mbar_wait(full + s, (u32)(it / ST) & 1u);
     const unsigned char* st0 = ring + s * SB;
-    for (int i = warp; i < (NOCOMPUTE ? 0 : TPS); i += NW) {
+#pragma unroll
+    for (int j = 0; j < (NOCOMPUTE ? 0 : TPS / NW); ++j) {  // TPS % NW == 0: fixed trip count, fully unrolled
+      const int i = warp + j * NW;
       const int kb = kc * TPS + i;
       u32 b0[NT][4], b1[NT][4];
       const u16* xb = xs + g * XSR + 2 * t + kb * 64;
