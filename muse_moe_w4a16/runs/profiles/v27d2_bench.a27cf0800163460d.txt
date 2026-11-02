@@ -1,0 +1,63 @@
+okc run a27cf0800163460d on muse_moe_w4a16
+submission  /workspace/okc-moe-v27/muse_moe_w4a16/runs/v27d2_bench.py
+status      ok
+passed      true
+speedup     1.5399081991592434
+speedup_ci  [1.5168095761718547 1.5630068221466318]
+score_us    8733.312808739242
+tests       5/5 passed
+
+scored shapes (µs; speed of light is the reference's bound)
+case                                                         sglang      yours  speedup        sol  
+bs=1 load=decode 1 sharding=ep8                               76.91      38.97   1.973x      11.42  
+bs=16 load=decode 16 sharding=ep8                            187.46     118.63   1.580x      52.52  
+bs=32 load=decode 32 sharding=ep8                            202.29     158.79   1.274x      70.76  
+bs=8 load=verify 1 sharding=ep8                              143.38      88.08   1.628x      37.32  
+bs=128 load=verify 16 sharding=ep8                           462.80     292.59   1.582x     101.34  
+bs=256 load=verify 32 sharding=ep8                           622.03     477.17   1.304x     108.94  
+
+profile 0: bs=1 load=decode 1 sharding=ep8
+kernel                                                           GPU time  share  calls
+moe_mma                                                           30.2 µs  88.0%      2
+_post_norm_sum_kernel                                              2.5 µs   7.4%      1
+route_prep                                                         1.6 µs   4.7%      1
+total                                                             34.3 µs
+
+profile 1: bs=16 load=decode 16 sharding=ep8
+kernel                                                           GPU time  share  calls
+moe_mma                                                          119.4 µs  95.6%      2
+_post_norm_sum_kernel                                              3.0 µs   2.4%      1
+route_prep                                                         2.5 µs   2.0%      1
+total                                                            124.9 µs
+
+profile 2: bs=32 load=decode 32 sharding=ep8
+kernel                                                           GPU time  share  calls
+moe_mma                                                          146.1 µs  95.7%      2
+_post_norm_sum_kernel                                              3.9 µs   2.5%      1
+route_prep                                                         2.6 µs   1.7%      1
+total                                                            152.6 µs
+
+profile 3: bs=8 load=verify 1 sharding=ep8
+kernel                                                           GPU time  share  calls
+moe_mma                                                          109.2 µs  95.8%      2
+_post_norm_sum_kernel                                              3.1 µs   2.7%      1
+route_prep                                                         1.7 µs   1.5%      1
+total                                                            114.0 µs
+
+profile 4: bs=128 load=verify 16 sharding=ep8
+kernel                                                           GPU time  share  calls
+moe_mma                                                          263.4 µs  96.6%      2
+route_prep                                                         5.2 µs   1.9%      1
+_post_norm_sum_kernel                                              4.2 µs   1.5%      1
+total                                                            272.8 µs
+
+profile 5: bs=256 load=verify 32 sharding=ep8
+kernel                                                           GPU time  share  calls
+void sglang::device::marlin_moe::Marlin<__nv_bfloat16, 56...     446.2 µs  95.1%      2
+void sglang::act_and_mul_kernel<__nv_bfloat16, (sglang::A...       6.0 µs   1.3%      1
+_post_expert_norm_weighted_sum_kernel                              5.4 µs   1.2%      1
+void at::native::index_elementwise_kernel<128, 4, at::nat...       3.1 µs   0.7%      1
+void at::native::unrolled_elementwise_kernel<at::native::...       3.1 µs   0.7%      1
+void moe_align_block_size_kernel<int>(int const*, int*, i...       2.8 µs   0.6%      1
+void count_and_sort_expert_tokens_kernel<int>(int const*,...       2.5 µs   0.5%      1
+total                                                            469.3 µs
