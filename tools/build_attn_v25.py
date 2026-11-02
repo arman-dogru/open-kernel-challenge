@@ -46,7 +46,7 @@ ROWS_FULL = ("rows", {cfg["rows"][0]}, {cfg["rows"][1]}, {cfg["rows"][2]}, {cfg[
 
 def _fv_smem(st, vt1=None):
     vt1 = FV_VT1 if vt1 is None else vt1
-    return 2 * st * FV_BN * 128 + (1 if vt1 else 2) * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
+    return 2 * st * FV_BN * 128 + (1 if vt1 & 1 else 2) * 2 * 9216 + 2 * 8192 + 1024  # K + V E4M3 stages, 2 V^T buffers (72 rows) and Q, alignment
 
 
 FV_SMEM = _fv_smem(FV_ST)''')
@@ -58,7 +58,8 @@ s = rep(s, '''def _fv_cubin():
     st = FV_ST if st is None else st
     vt1 = FV_VT1 if vt1 is None else vt1
     if ("cubin", st, vt1) not in _FV:''')
-s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 else [])''')
+s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 & 1 else []) + (
+            [f"-DFVSKIP={vt1 >> 1}".encode()] if vt1 >> 1 else [])  # vt1 bit 0: VT1; bits 1+: FVSKIP (diag)''')
 s = rep(s, '''        _FV["cubin"] = cubin
     return _FV["cubin"]''', '''        _FV[("cubin", st, vt1)] = cubin
     return _FV[("cubin", st, vt1)]''')
@@ -182,7 +183,8 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            cands = [(3, 2, 0), (3, 4, 0), (4, 2, 1), (4, 4, 1), (4, 8, 1), (3, 4, 1), (5, 4, 1), (6, 4, 1)]
+            # vt1 = VT1 | FVSKIP << 1: FVSKIP 1 = loads + barriers only, 2 = + Q.K and V transpose (diag, wrong output)
+            cands = [(3, 4, 0), (3, 4, 2), (4, 4, 3), (2, 4, 2), (3, 8, 2), (3, 4, 4), (4, 4, 5), (5, 4, 3), (6, 4, 3), (8, 4, 3)]
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
@@ -197,7 +199,7 @@ def _v25_diag():
                 except Exception as e:
                     print(f"  b {batch} L {L} fv {st} {occ} {vt1} FAILED {repr(e)[:200]}", flush=True)
         else:
-            cands = [(128, 4, 3, 2), (128, 4, 3, 4)]
+            cands = [(128, 4, 3, 2)]
             for bn, w, stg, occ in cands:
                 if True:
                     if True:

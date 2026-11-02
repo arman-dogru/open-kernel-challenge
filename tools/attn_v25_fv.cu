@@ -26,6 +26,9 @@
 #define G 8
 #define LQ 8
 #define BN 64
+#ifndef FVSKIP
+#define FVSKIP 0  // diagnostic only: 1 = loads + barriers only (no MMA / softmax), 2 = also Q.K + V transpose, no softmax / P.V
+#endif
 #ifndef VT1
 #define VT1 0
 #endif
@@ -194,6 +197,10 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     __syncthreads();  // tile i's K/V visible; every warp is past tile i - 1's transpose and S / P.V waits
     issue(i + ST - 1, st == 0 ? ST - 1 : st - 1, nextrow);  // into tile i - 1's stage (fully consumed)
     nextrow = rowof(i + ST);
+#if FVSKIP == 1
+    st = st == ST - 1 ? 0 : st + 1;
+    continue;
+#endif
 
     // S(i) = Q.K^T issued first, so the tensor cores run it while this warpgroup transposes V(i)
     const unsigned kt = ks_base + st * TILE + h * 64;
@@ -223,6 +230,10 @@ attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char*
     __syncthreads();
     st = st == ST - 1 ? 0 : st + 1;
     WG_WAIT_SO(sc, oacc);  // S(i) and the previous tile's P.V (overlapped with this tile's barriers/transpose)
+#if FVSKIP == 2
+    if (sc[0][0] == 12345.f) oacc[0][0] += 1.f;
+    continue;
+#endif
     const int base = lo + i * BN;
     if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
       const int tb = base + t4 * 2;
