@@ -17,6 +17,8 @@ s = open(SRC).read()
 cu = open("tools/attn_v25_fv.cu").read()
 assert '"""' not in cu and cu.count('"memory"') >= 16
 ws = open("tools/attn_v25_ws.cu").read()  # warp-specialized variant (flag bit 6 of fv_vt1)
+gb = open("tools/attn_v25_gbench.cu").read()  # gather microbenchmark (diag only)
+assert '"""' not in gb
 assert '"""' not in ws and ws.count('"memory"') >= 20
 DIAG = sys.argv[1] == "--diag"
 cfg = {"fv_st": 3, "fv_occ": 4, "fv_vt1": 0, "rows": [128, 4, 3, 4, True]}
@@ -120,6 +122,7 @@ s = rep(s, '''# okc: problem=muse_attention_decode
 """v24:''', head)
 
 if DIAG:
+    s += '\n\n_GB_SRC = r"""\n' + gb + '"""  # tools/attn_v25_gbench.cu (diag only)\n'
     s += r'''
 
 
@@ -241,6 +244,52 @@ def _v25_validate():
     return bad == 0 and n > 0
 
 
+_GB = {}
+
+
+def _gb_launcher(data, kind, st, npw, pad, occ):
+    """Gather microbenchmark launcher: kind "bulk" (TMA row copies) / "cpa" (npw producer warps, 16-byte cp.async);
+    pad 1: dynamic smem padded to the FV kernel's (2 CTAs/SM), 0: just the ring (more CTAs/SM)."""
+    import cupy as cp
+    import numpy as np
+    from cuda.bindings import nvrtc
+    key = (st, npw)
+    if key not in _GB:
+        err, prog = nvrtc.nvrtcCreateProgram(_GB_SRC.encode(), b"gb.cu", 0, [], [])
+        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode(), f"-DNPW={npw}".encode()]
+        (res,) = nvrtc.nvrtcCompileProgram(prog, len(opts), opts)
+        assert res == nvrtc.nvrtcResult.NVRTC_SUCCESS
+        _, size = nvrtc.nvrtcGetCUBINSize(prog)
+        cubin = b" " * size
+        nvrtc.nvrtcGetCUBIN(prog, cubin)
+        mod = cp.cuda.function.Module()
+        mod.load(cubin)
+        _GB[key] = mod
+    mod = _GB[key]
+    f = mod.get_function("gb_bulk" if kind == "bulk" else "gb_cpa")
+    smem = 2 * st * 8192 + 1024 + 64
+    if pad:
+        smem = max(smem, _fv_smem(3, 64))
+    drv = cp.cuda.driver
+    drv.funcSetAttribute(f.ptr, getattr(drv, "CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES", 8), smem)
+    cfg = data["config"]
+    batch, page = cfg["batch"], cfg["page_size"]
+    capacity = data["page_table"].shape[1] * page
+    nsplit = _nsplit(cfg, batch, 1, capacity, occ)
+    chunk = triton.cdiv(capacity, nsplit)
+    kc, vc = data["k_cache"].view(torch.uint8), data["v_cache"].view(torch.uint8)
+    pt, sl = data["page_table"], data["cache_seqlens"]
+    sink = torch.zeros(4, dtype=torch.int32, device=kc.device)
+    threads = 256 + 32 * (1 if kind == "bulk" else npw)
+
+    def fn():
+        with cp.cuda.ExternalStream(torch.cuda.current_stream().cuda_stream):
+            f((nsplit, batch), (threads,), (np.uint64(kc.data_ptr()), np.uint64(vc.data_ptr()), np.uint64(pt.data_ptr()),
+                                            np.int32(pt.stride(0)), np.uint64(sl.data_ptr()), np.int32(chunk),
+                                            np.int32(page.bit_length() - 1), np.uint64(sink.data_ptr())), shared_mem=smem)
+    return fn
+
+
 def _v25_diag():
     import time
     if _DIAG25 or not torch.cuda.is_available() or torch.cuda.get_device_capability() != (9, 0):
@@ -286,7 +335,7 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            cands = [(3, 4, 0), (3, 4, 64), (3, 2, 64), (3, 3, 64), (3, 6, 64), (3, 8, 64), (2, 4, 64), (2, 2, 64)]  # (ST, splits/SM, flags; 64 = WS)
+            cands = [(3, 4, 0), (3, 4, 2), (3, 2, 64)]  # (ST, splits/SM, flags; 2 = v24 loads only, 64 = WS)
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
@@ -300,6 +349,17 @@ def _v25_diag():
                     res.append((timed(fn), err, ("fv", st, occ, vt1)))
                 except Exception as e:
                     print(f"  b {batch} L {L} fv {st} {occ} {vt1} FAILED {repr(e)[:200]}", flush=True)
+            # gather microbenchmark (tools/attn_v25_gbench.cu): kernel alone, no rope / combine
+            for kind, gst, npw, pad, occ in (("cpa", 3, 1, 1, 4), ("cpa", 3, 2, 1, 4), ("cpa", 3, 4, 1, 4), ("cpa", 6, 4, 1, 4),
+                                             ("bulk", 3, 1, 1, 4), ("bulk", 6, 1, 1, 4), ("bulk", 3, 1, 0, 4),
+                                             ("bulk", 3, 1, 0, 16), ("cpa", 3, 4, 0, 16)):
+                try:
+                    fn = _gb_launcher(data, kind, gst, npw, pad, occ)
+                    fn()
+                    torch.cuda.synchronize()
+                    res.append((timed(fn), 0.0, ("gb", kind, gst, npw, pad, occ)))
+                except Exception as e:
+                    print(f"  b {batch} L {L} gb {kind} {gst} {npw} {pad} {occ} FAILED {repr(e)[:200]}", flush=True)
         else:
             cands = [(128, 4, 3, 2)]
             for bn, w, stg, occ in cands:
