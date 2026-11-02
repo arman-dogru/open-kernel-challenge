@@ -1,0 +1,107 @@
+okc run 7a98fe19e6294071 on muse_attention_decode
+submission  /workspace/attn-v20-wt/muse_attention_decode/runs/v22_cuda_fv.py
+status      ok
+passed      true
+speedup     1.3684645522604775
+speedup_ci  [1.3479375839765704 1.3889915205443846]
+score_us    2752.2086661131957
+tests       16/16 passed
+
+scored shapes (µs; speed of light is the reference's bound)
+case                                                         sglang      yours  speedup        sol  
+batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 1 page=1      20.69      12.71   1.628x       0.11  
+batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 1 page=1      31.90      19.38   1.646x       4.27  
+batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 16 page=1 spread=agentic      26.46      13.99   1.891x       1.65  
+batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 16 page=1 spread=agentic     201.30     149.69   1.345x      63.18  
+batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 32 page=1 spread=agentic      31.31      16.84   1.859x       3.29  
+batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 32 page=1 spread=agentic     385.57     250.21   1.541x     126.35  
+batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 1 page=1 q_len=8      22.93      13.08   1.752x       0.12  
+batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 1 page=1 q_len=8      35.86      21.91   1.636x       4.28  
+batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 16 page=1 q_len=8 spread=agentic      29.10      17.84   1.632x       1.86  
+batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 16 page=1 q_len=8 spread=agentic     205.25     211.99   0.968x      63.39  
+batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 32 page=1 q_len=8 spread=agentic      34.90      25.31   1.379x       3.72  
+batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 32 page=1 q_len=8 spread=agentic     390.51     460.20   0.849x     126.78  
+
+profile 0: batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 1 page=1
+kernel                                                           GPU time  share  calls
+_attn_split                                                        5.6 µs  65.7%      1
+_norm_rope_store_kernel                                            1.7 µs  20.0%      1
+_combine_norm_gate                                                 1.2 µs  14.3%      1
+total                                                              8.5 µs
+
+profile 1: batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 1 page=1
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                  10.7 µs  75.7%      1
+_combine_norm_gate                                                 2.4 µs  16.8%      1
+_norm_rope_store_kernel                                            1.1 µs   7.5%      1
+total                                                             14.1 µs
+
+profile 2: batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 16 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                        7.1 µs  72.3%      1
+_norm_rope_store_kernel                                            1.4 µs  14.7%      1
+_combine_norm_gate                                                 1.3 µs  13.0%      1
+total                                                              9.8 µs
+
+profile 3: batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 16 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 144.5 µs  96.1%      1
+_combine_norm_gate                                                 4.3 µs   2.9%      1
+_norm_rope_store_kernel                                            1.6 µs   1.1%      1
+total                                                            150.4 µs
+
+profile 4: batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=decode 32 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       10.5 µs  76.8%      1
+_norm_rope_store_kernel                                            1.7 µs  12.4%      1
+_combine_norm_gate                                                 1.5 µs  10.8%      1
+total                                                             13.6 µs
+
+profile 5: batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=decode 32 page=1 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split_rows                                                 246.6 µs  97.2%      1
+_combine_norm_gate                                                 5.4 µs   2.1%      1
+_norm_rope_store_kernel                                            1.7 µs   0.7%      1
+total                                                            253.6 µs
+
+profile 6: batch=1 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 1 page=1 q_len=8
+kernel                                                           GPU time  share  calls
+_attn_split                                                        6.6 µs  71.4%      1
+_norm_rope_store_kernel                                            1.4 µs  15.5%      1
+_combine_norm_gate                                                 1.2 µs  13.1%      1
+total                                                              9.3 µs
+
+profile 7: batch=1 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 1 page=1 q_len=8
+kernel                                                           GPU time  share  calls
+_attn_split                                                       15.3 µs  78.7%      1
+_combine_norm_gate                                                 3.0 µs  15.5%      1
+_norm_rope_store_kernel                                            1.1 µs   5.8%      1
+total                                                             19.4 µs
+
+profile 8: batch=16 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 16 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       10.0 µs  68.0%      1
+_combine_norm_gate                                                 2.7 µs  18.0%      1
+_norm_rope_store_tok_kernel                                        2.1 µs  14.1%      1
+total                                                             14.8 µs
+
+profile 9: batch=16 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 16 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+attn_fv                                                          205.9 µs  96.4%      1
+_combine_norm_gate                                                 5.0 µs   2.3%      1
+_norm_rope_store_tok_kernel                                        2.6 µs   1.2%      1
+total                                                            213.4 µs
+
+profile 10: batch=32 ctx=80000 dist=soft heads=tp8 layer=sliding load=verify 32 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+_attn_split                                                       16.9 µs  71.5%      1
+_combine_norm_gate                                                 4.0 µs  16.8%      1
+_norm_rope_store_tok_kernel                                        2.8 µs  11.7%      1
+total                                                             23.6 µs
+
+profile 11: batch=32 ctx=80000 dist=coherent heads=tp8 layer=full load=verify 32 page=1 q_len=8 spread=agentic
+kernel                                                           GPU time  share  calls
+attn_fv                                                          459.8 µs  98.1%      1
+_combine_norm_gate                                                 6.3 µs   1.4%      1
+_norm_rope_store_tok_kernel                                        2.6 µs   0.6%      1
+total                                                            468.7 µs
