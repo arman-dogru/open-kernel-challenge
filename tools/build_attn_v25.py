@@ -177,7 +177,16 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            cands = [(st, occ) for st in (3, 4) for occ in (1, 2, 4, 8)]
+            for p in [("rows", 128, 4, 3, 4, True), ("rows", 64, 4, 3, 4, True), ("rows", 128, 8, 3, 4, True),
+                      ("rows", 64, 8, 3, 2, True), ("head", 64, 4, 3, 4, False), ("head", 64, 4, 3, 2, True),
+                      ("head", 128, 4, 3, 2, True), ("head", 128, 8, 3, 2, True)]:
+                try:
+                    o = _kernel_path(data, p).float()
+                    err = float((o.view(-1) - ref.view(-1)).norm() / ref.norm())
+                    res.append((timed(lambda p=p: _kernel_path(data, p)), err, p))
+                except Exception as e:
+                    print(f"  b {batch} L {L} {p} FAILED {repr(e)[:160]}", flush=True)
+            cands = [(3, 2), (3, 4)]
             for st, occ in cands:
                 def fn(st=st, occ=occ):
                     cfg = data["config"]
@@ -192,8 +201,8 @@ def _v25_diag():
                 except Exception as e:
                     print(f"  b {batch} L {L} fv {st} {occ} FAILED {repr(e)[:200]}", flush=True)
         else:
-            cands = [(bn, w, 3, occ) for bn in (64, 128) for w in (4, 8) for occ in (2, 4, 8)] + [
-                (128, 4, 2, 4), (128, 4, 4, 4), (128, 8, 4, 4)]
+            cands = [(128, 4, 3, occ) for occ in (1, 2, 3, 4)] + [(256, 4, 3, occ) for occ in (1, 2, 4)] + [
+                (256, 8, 3, 2), (256, 8, 3, 4), (256, 4, 2, 2), (128, 2, 3, 2), (128, 2, 3, 4), (128, 4, 4, 2), (256, 8, 2, 2)]
             for bn, w, stg, occ in cands:
                 if True:
                     if True:
