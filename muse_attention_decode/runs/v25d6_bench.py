@@ -1319,56 +1319,92 @@ def _v25_inputs(batch, L, seed, dev, ctx=80000):
                        "sm_scale": d ** -0.5, "kv_scale": 1.0}}
 
 
+def _v25_case(batch, ctx, page, spread, seed, dev, kv_scale=1.0, L=8):
+    """Validation inputs (no reference import: the server rejects it): page size `page`, scattered pages,
+    lengths fixed / agentic (+/- 7.5%) / mixed (uniform 1 .. ctx), FP8 K/V with scale kv_scale, -1 past the end."""
+    g = torch.Generator(device=dev).manual_seed(seed)
+    hq, hkv, d = 16, 2, 64
+    u = torch.rand((batch,), generator=g, device=dev)
+    if spread == "agentic":
+        seq = (ctx * (1 + 0.075 * (2 * u - 1))).long()
+    elif spread == "mixed":
+        seq = (1 + u * (ctx - 1)).long()
+    else:
+        seq = torch.full((batch,), ctx, device=dev, dtype=torch.long)
+    seq = seq.clamp(1, int(ctx * 1.075) + 1)
+    longest = int(ctx * 1.075) + 1
+    maxp = (longest + L + page - 1) // page
+    total = batch * maxp
+    perm = torch.randperm(total, generator=g, device=dev).to(torch.int32)
+    pt = torch.full((batch, maxp), -1, dtype=torch.int32, device=dev)
+    need = (seq + L + page - 1) // page
+    for bb in range(batch):
+        pt[bb, :int(need[bb])] = perm[bb * maxp: bb * maxp + int(need[bb])]
+    kc = (torch.randn((total, page, hkv, d), generator=g, device=dev) / kv_scale).to(FP8)
+    vc = (torch.randn((total, page, hkv, d), generator=g, device=dev) / kv_scale).to(FP8)
+    qkv = torch.randn((batch * L, (hq + 2 * hkv) * d + hq * d), generator=g, device=dev).to(torch.bfloat16)
+    positions = (seq[:, None] + torch.arange(L, device=dev)).reshape(-1)
+    pos = positions.view(batch, L)
+    loc = (torch.gather(pt.long(), 1, pos // page) * page + pos % page).reshape(-1)
+    sc = torch.tensor(kv_scale, dtype=torch.float32, device=dev)
+    return {"qkv": qkv, "positions": positions, "cache_loc": loc, "cache_seqlens": (seq + L).to(torch.int32),
+            "cu_seqlens_q": torch.arange(0, batch * L + 1, L, dtype=torch.int32, device=dev),
+            "scheduler_metadata": None, "k_cache": kc, "v_cache": vc, "k_scale": sc, "v_scale": sc.clone(),
+            "page_table": pt, "seq_lens": seq.to(torch.int32),
+            "config": {"batch": batch, "q_len": L, "num_q_heads": hq, "num_kv_heads": hkv, "head_dim": d,
+                       "page_size": page, "window": 0, "rope_theta": 0.0, "qk_scale_factor": 5.4730064863875,
+                       "sm_scale": d ** -0.5, "kv_scale": kv_scale}}
+
+
+WS_EXACT_TOL = 0.0   # max |ws - v24| at the same split count / ST (same smem bytes, same MMA and softmax order)
+WS_SPLIT_TOL = 2e-2  # rel-L2 of any (ST, splits) output vs v24's default config (split order changes bf16 rounding)
+
+
 def _v25_validate():
-    """WS kernel (flags 64) vs v24's FV kernel at the same split count (bit-exact expected: same smem bytes, same
-    MMA / softmax order) and vs the judge's check (reference.check_implementation), on the local FV cases plus
-    forced split counts (splits/SM 1 .. 33: empty splits on short contexts). Thresholds: max |ws - v24| == 0
-    (REL_TOL 0; anything above is reported as a mismatch with its rel-L2), check_implementation ok."""
+    """WS kernel (flags 64) vs v24's FV kernel (judge-validated) at the same ST and split count: bit-exact expected
+    (assert max |diff| <= WS_EXACT_TOL); every output finite and within WS_SPLIT_TOL rel-L2 of v24 at its default
+    config. Cases: local-test-like full q_len 8 shapes (pages 1 / 16 / 64, fixed / agentic / mixed lengths, tiny
+    contexts with empty splits, kv_scale 1/64) x forced splits/SM 1 .. 33 x ST 2 / 3."""
     import time
     t0 = time.time()
-    try:
-        import reference as R
-    except Exception as e:
-        print("v25 WS validate: reference not importable:", repr(e)[:200], flush=True)
-        return
-    cases = [dict(batch=2, ctx=900, page=1, kv_scale=0.015625), dict(batch=3, ctx=3000), dict(batch=2, ctx=3000),
-             dict(batch=17, ctx=1800, spread="agentic"), dict(batch=2, ctx=700, spread="mixed", page=1),
-             dict(batch=2, ctx=10), dict(batch=2, ctx=10, page=1), dict(batch=4, ctx=2500, dist="edges", page=1),
-             dict(batch=3, ctx=2000, dist="coherent"), dict(batch=2, ctx=1500, dist="soft", page=16),
-             dict(batch=5, ctx=4100, page=1, spread="agentic"), dict(batch=16, ctx=80000, page=1, spread="agentic")]
+    dev = torch.cuda.current_device()
+    cases = [(2, 900, 1, "fixed", 0.015625), (3, 3000, 64, "fixed", 1.0), (2, 3000, 64, "fixed", 1.0),
+             (17, 1800, 64, "agentic", 1.0), (2, 700, 1, "mixed", 1.0), (2, 10, 64, "fixed", 1.0),
+             (2, 10, 1, "fixed", 1.0), (4, 2500, 1, "mixed", 1.0), (3, 2000, 16, "agentic", 1.0),
+             (5, 4100, 1, "agentic", 1.0), (7, 130, 2, "mixed", 1.0), (16, 80000, 1, "agentic", 1.0)]
     n = bad = 0
-    for ci, c in enumerate(cases):
+    for ci, (batch, ctx, page, spread, kvs) in enumerate(cases):
         if time.time() - t0 > 120:
             print("v25 WS validate: (time guard)", flush=True)
             break
-        try:
-            data = R.generate_input(heads="tp8", layer="full", q_len=8, seed=500 + ci, **c)
-        except Exception as e:
-            print(f"v25 WS validate: case {c} generate_input failed {repr(e)[:160]}", flush=True)
-            continue
+        data = _v25_case(batch, ctx, page, spread, 500 + ci, dev, kvs)
         cfg = data["config"]
-        T = cfg["batch"] * 8
-        for occ in ((1, 2, 4, 8, 33) if cfg["batch"] < 16 else (2, 4)):
+        T = batch * 8
+
+        def run(st, occ, flags):
+            qkv = data["qkv"].view(T, -1)
+            q = _norm_rope_store_fused(data, qkv, cfg, FP8)
+            return _fv(data, q, qkv, cfg, st, occ, flags).float()
+        base = run(FV_ST, FV_OCC, 0)
+        for occ in ((1, 2, 4, 8, 33) if batch < 16 else (2, 4)):
             for st in (3, 2):
-                outs = []
-                for flags in (0, 64):
-                    qkv = data["qkv"].view(T, -1)
-                    q = _norm_rope_store_fused(data, qkv, cfg, FP8)
-                    outs.append(_fv(data, q, qkv, cfg, st, occ, flags))
+                v24o, wso = run(st, occ, 0), run(st, occ, 64)
                 torch.cuda.synchronize()
-                v24o, wso = outs
-                dmax = float((wso.float() - v24o.float()).abs().max())
-                rel = float((wso.float() - v24o.float()).norm() / v24o.float().norm().clamp_min(1e-30))
-                ok, msg = R.check_implementation(data, R.collect(data, wso))
-                finite = bool(torch.isfinite(wso.float()).all())
+                dmax = float((wso - v24o).abs().max())
+                rel = float((wso - base).norm() / base.norm().clamp_min(1e-30))
+                fin = bool(torch.isfinite(wso).all())
                 n += 1
-                if dmax != 0.0 or not ok or not finite:
+                try:
+                    assert fin, "non-finite"
+                    assert dmax <= WS_EXACT_TOL, f"max|ws-v24| {dmax:.3e} > {WS_EXACT_TOL}"
+                    assert rel <= WS_SPLIT_TOL, f"rel-L2 vs v24 default {rel:.2e} > {WS_SPLIT_TOL}"
+                except AssertionError as e:
                     bad += 1
-                    print(f"  WS MISMATCH {c} occ {occ} st {st}: max|ws-v24| {dmax:.3e} rel {rel:.2e} check {ok} {msg[:120]}",
-                          flush=True)
+                    print(f"  WS FAIL b {batch} ctx {ctx} page {page} {spread} kvs {kvs} occ {occ} st {st}: {e}", flush=True)
         del data
-    print(f"v25 WS validate: {'PASS' if bad == 0 and n else 'FAIL'} {n - bad}/{n} (bit-exact vs v24 FV + check_implementation)"
-          f" in {time.time() - t0:.0f} s", flush=True)
+    print(f"v25 WS validate: {'PASS' if bad == 0 and n else 'FAIL'} {n - bad}/{n} (bit-exact vs v24 FV at equal splits,"
+          f" rel-L2 <= {WS_SPLIT_TOL} vs v24 default) in {time.time() - t0:.0f} s", flush=True)
+    return bad == 0 and n > 0
 
 
 def _v25_diag():
@@ -1401,7 +1437,10 @@ def _v25_diag():
 
     floor = timed(lambda: tiny.zero_())
     print(f"v25d diag: {torch.cuda.get_device_name()} floor {floor:.2f} us", flush=True)
-    _v25_validate()
+    try:
+        _v25_validate()
+    except Exception as e:
+        print("v25 WS validate: ERROR", repr(e)[:400], flush=True)
     summ = []
     for batch, L in ((16, 8), (32, 8)):
         if time.time() - t0 > 240:
