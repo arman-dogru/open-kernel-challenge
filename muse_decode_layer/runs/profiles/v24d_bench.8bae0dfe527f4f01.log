@@ -1,0 +1,171 @@
+e-05
+  rows BN 64 w 2 st 3 occ 2 (nsplit 16) hoist/pref 1: 162.7 us 2.03 TB/s err 3.3e-05
+  rows BN 64 w 2 st 4 occ 2 (nsplit 16) hoist/pref 1: 161.7 us 2.05 TB/s err 3.3e-05
+  rows BN 128 w 2 st 2 occ 2 (nsplit 16) hoist/pref 1: 409.7 us 0.81 TB/s err 3.3e-05
+  rows BN 128 w 2 st 3 occ 2 (nsplit 16) hoist/pref 1: 351.8 us 0.94 TB/s err 3.3e-05
+  rows BN 128 w 2 st 4 occ 2 (nsplit 16) hoist/pref 1: 345.5 us 0.96 TB/s err 3.3e-05
+  rows BN 128 w 4 st 2 occ 2 (nsplit 16) hoist/pref 1: 147.1 us 2.25 TB/s err 3.3e-05
+  rows BN 128 w 4 st 3 occ 2 (nsplit 16) hoist/pref 1: 123.0 us 2.69 TB/s err 3.3e-05
+  rows BN 128 w 4 st 4 occ 2 (nsplit 16) hoist/pref 1: 125.9 us 2.63 TB/s err 3.3e-05
+  rows BN 256 w 4 st 2 occ 2 (nsplit 16) hoist/pref 1: 268.9 us 1.23 TB/s err 3.3e-05
+  rows BN 256 w 4 st 3 occ 2 (nsplit 16) hoist/pref 1: 366.2 us 0.90 TB/s err 3.3e-05
+  rows BN 256 w 4 st 4 occ 2 (nsplit 16) hoist/pref 1: 386.0 us 0.86 TB/s err 3.3e-05
+  rows BN 64 w 1 st 2 occ 2 (nsplit 16) hoist/pref 1: 292.8 us 1.13 TB/s err 3.3e-05
+  rows BN 64 w 1 st 3 occ 2 (nsplit 16) hoist/pref 1: 252.2 us 1.31 TB/s err 3.3e-05
+  rows BN 64 w 1 st 4 occ 2 (nsplit 16) hoist/pref 1: 262.0 us 1.26 TB/s err 3.3e-05
+  rows BN 128 w 1 st 2 occ 2 (nsplit 16) hoist/pref 1: 333.7 us 0.99 TB/s err 3.3e-05
+  rows BN 128 w 1 st 3 occ 2 (nsplit 16) hoist/pref 1: 335.2 us 0.99 TB/s err 3.3e-05
+  rows BN 128 w 1 st 4 occ 2 (nsplit 16) hoist/pref 1: 317.7 us 1.04 TB/s err 3.3e-05
+  rows BN 64 w 2 st 2 occ 3 (nsplit 16) hoist/pref 1: 199.4 us 1.66 TB/s err 3.3e-05
+  rows BN 64 w 2 st 3 occ 3 (nsplit 16) hoist/pref 1: 161.6 us 2.05 TB/s err 3.3e-05
+  rows BN 64 w 2 st 4 occ 3 (nsplit 16) hoist/pref 1: 161.8 us 2.04 TB/s err 3.3e-05
+  rows BN 128 w 2 st 2 occ 3 (nsplit 16) hoist/pref 1: 410.2 us 0.81 TB/s err 3.3e-05
+  rows BN 128 w 2 st 3 occ 3 (nsplit 16) hoist/pref 1: 350.4 us 0.94 TB/s err 3.3e-05
+  rows BN 128 w 2 st 4 occ 3 (nsplit 16) hoist/pref 1: 346.5 us 0.95 TB/s err 3.3e-05
+  rows BN 128 w 4 st 2 occ 3 (nsplit 16) hoist/pref 1: 147.9 us 2.24 TB/s err 3.3e-05
+  rows BN 128 w 4 st 3 occ 3 (nsplit 16) hoist/pref 1: 124.1 us 2.67 TB/s err 3.3e-05
+  rows BN 128 w 4 st 4 occ 3 (nsplit 16) hoist/pref 1: 125.3 us 2.64 TB/s err 3.3e-05
+  rows BN 256 w 4 st 2 occ 3 (nsplit 16) hoist/pref 1: 268.7 us 1.23 TB/s err 3.3e-05
+  rows BN 256 w 4 st 3 occ 3 (nsplit 16) hoist/pref 1: 367.8 us 0.90 TB/s err 3.3e-05
+  rows BN 256 w 4 st 4 occ 3 (nsplit 16) hoist/pref 1: 387.2 us 0.85 TB/s err 3.3e-05
+  rows BN 64 w 1 st 2 occ 3 (nsplit 16) hoist/pref 1: 292.6 us 1.13 TB/s err 3.3e-05
+  rows BN 64 w 1 st 3 occ 3 (nsplit 16) hoist/pref 1: 250.8 us 1.32 TB/s err 3.3e-05
+  rows BN 64 w 1 st 4 occ 3 (nsplit 16) hoist/pref 1: 262.7 us 1.26 TB/s err 3.3e-05
+  rows BN 128 w 1 st 2 occ 3 (nsplit 16) hoist/pref 1: 334.6 us 0.99 TB/s err 3.3e-05
+  rows BN 128 w 1 st 3 occ 3 (nsplit 16) hoist/pref 1: 333.4 us 0.99 TB/s err 3.3e-05
+  rows BN 128 w 1 st 4 occ 3 (nsplit 16) hoist/pref 1: 316.1 us 1.05 TB/s err 3.3e-05
+  rows BN 64 w 2 st 2 occ 4 (nsplit 32) hoist/pref 1: 141.5 us 2.34 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 4 (nsplit 32) hoist/pref 1: 125.2 us 2.64 TB/s err 0.0e+00
+  rows BN 64 w 2 st 4 occ 4 (nsplit 32) hoist/pref 1: 126.9 us 2.61 TB/s err 0.0e+00
+  rows BN 128 w 2 st 2 occ 4 (nsplit 32) hoist/pref 1: 276.9 us 1.20 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 4 (nsplit 32) hoist/pref 1: 375.8 us 0.88 TB/s err 0.0e+00
+  rows BN 128 w 2 st 4 occ 4 (nsplit 32) hoist/pref 1: 350.4 us 0.94 TB/s err 0.0e+00
+  rows BN 128 w 4 st 2 occ 4 (nsplit 32) hoist/pref 1: 146.4 us 2.26 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 4 (nsplit 32) hoist/pref 1: 126.4 us 2.62 TB/s err 0.0e+00
+  rows BN 128 w 4 st 4 occ 4 (nsplit 32) hoist/pref 1: 130.5 us 2.54 TB/s err 0.0e+00
+  rows BN 256 w 4 st 2 occ 4 (nsplit 32) hoist/pref 1: 270.0 us 1.23 TB/s err 0.0e+00
+  rows BN 256 w 4 st 3 occ 4 (nsplit 32) hoist/pref 1: 378.9 us 0.87 TB/s err 0.0e+00
+  rows BN 256 w 4 st 4 occ 4 (nsplit 32) hoist/pref 1: 395.1 us 0.84 TB/s err 0.0e+00
+  rows BN 64 w 1 st 2 occ 4 (nsplit 32) hoist/pref 1: 163.4 us 2.03 TB/s err 0.0e+00
+  rows BN 64 w 1 st 3 occ 4 (nsplit 32) hoist/pref 1: 145.3 us 2.28 TB/s err 0.0e+00
+  rows BN 64 w 1 st 4 occ 4 (nsplit 32) hoist/pref 1: 145.6 us 2.27 TB/s err 0.0e+00
+  rows BN 128 w 1 st 2 occ 4 (nsplit 32) hoist/pref 1: 194.8 us 1.70 TB/s err 0.0e+00
+  rows BN 128 w 1 st 3 occ 4 (nsplit 32) hoist/pref 1: 315.7 us 1.05 TB/s err 0.0e+00
+  rows BN 128 w 1 st 4 occ 4 (nsplit 32) hoist/pref 1: 308.3 us 1.07 TB/s err 0.0e+00
+  rows BN 64 w 2 st 2 occ 6 (nsplit 64) hoist/pref 1: 142.5 us 2.32 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 6 (nsplit 64) hoist/pref 1: 128.1 us 2.58 TB/s err 0.0e+00
+  rows BN 64 w 2 st 4 occ 6 (nsplit 64) hoist/pref 1: 133.9 us 2.47 TB/s err 0.0e+00
+  rows BN 128 w 2 st 2 occ 6 (nsplit 64) hoist/pref 1: 274.9 us 1.20 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 6 (nsplit 64) hoist/pref 1: 305.3 us 1.08 TB/s err 0.0e+00
+  rows BN 128 w 2 st 4 occ 6 (nsplit 64) hoist/pref 1: 359.8 us 0.92 TB/s err 0.0e+00
+  rows BN 128 w 4 st 2 occ 6 (nsplit 64) hoist/pref 1: 153.0 us 2.16 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 6 (nsplit 64) hoist/pref 1: 137.8 us 2.40 TB/s err 0.0e+00
+  rows BN 128 w 4 st 4 occ 6 (nsplit 64) hoist/pref 1: 141.9 us 2.33 TB/s err 0.0e+00
+  rows BN 256 w 4 st 2 occ 6 (nsplit 64) hoist/pref 1: 288.8 us 1.15 TB/s err 0.0e+00
+  rows BN 256 w 4 st 3 occ 6 (nsplit 64) hoist/pref 1: 401.3 us 0.82 TB/s err 0.0e+00
+  rows BN 256 w 4 st 4 occ 6 (nsplit 64) hoist/pref 1: 407.6 us 0.81 TB/s err 0.0e+00
+  rows BN 64 w 1 st 2 occ 6 (nsplit 64) hoist/pref 1: 121.2 us 2.73 TB/s err 0.0e+00
+  rows BN 64 w 1 st 3 occ 6 (nsplit 64) hoist/pref 1: 145.8 us 2.27 TB/s err 0.0e+00
+  rows BN 64 w 1 st 4 occ 6 (nsplit 64) hoist/pref 1: 170.5 us 1.94 TB/s err 0.0e+00
+  rows BN 128 w 1 st 2 occ 6 (nsplit 64) hoist/pref 1: 221.9 us 1.49 TB/s err 0.0e+00
+  rows BN 128 w 1 st 3 occ 6 (nsplit 64) hoist/pref 1: 265.7 us 1.25 TB/s err 0.0e+00
+  rows BN 128 w 1 st 4 occ 6 (nsplit 64) hoist/pref 1: 324.5 us 1.02 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 4 (nsplit 32) hoist/pref 0: 155.8 us 2.12 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 4 (nsplit 32) hoist/pref 0: 130.2 us 2.54 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 16 (nsplit 128) hoist/pref 1: 137.4 us 2.41 TB/s err 1.8e-06
+  rows BN 64 w 2 st 2 occ 16 (nsplit 128) hoist/pref 1: 148.8 us 2.22 TB/s err 1.8e-06
+batch 16 q_len 8 full: K+V 331.0 MB (4.8 TB/s floor 68.9 us)
+  attn_fv occ 1 (nsplit 8): 211.0 us 1.57 TB/s err 0.0e+00
+  attn_fv occ 2 (nsplit 16): 165.8 us 2.00 TB/s err 4.2e-04
+  attn_fv occ 3 (nsplit 16): 165.6 us 2.00 TB/s err 4.2e-04
+  attn_fv occ 4 (nsplit 32): 168.2 us 1.97 TB/s err 5.0e-04
+  attn_fv occ 6 (nsplit 64): 179.4 us 1.85 TB/s err 5.0e-04
+  attn_fv occ 8 (nsplit 64): 178.3 us 1.86 TB/s err 5.0e-04
+  attn_fv occ 12 (nsplit 128): 198.0 us 1.67 TB/s err 5.0e-04
+batch 32 q_len 1 full: K+V 664.9 MB (4.8 TB/s floor 138.5 us)
+  rows BN 128 w 4 st 3 occ 4 (nsplit 16) hoist/pref 1: 234.0 us 2.84 TB/s err 0.0e+00
+  rows BN 64 w 2 st 2 occ 2 (nsplit 8) hoist/pref 1: 386.8 us 1.72 TB/s err 2.3e-05
+  rows BN 64 w 2 st 3 occ 2 (nsplit 8) hoist/pref 1: 304.5 us 2.18 TB/s err 2.3e-05
+  rows BN 64 w 2 st 4 occ 2 (nsplit 8) hoist/pref 1: 313.7 us 2.12 TB/s err 2.3e-05
+  rows BN 128 w 2 st 2 occ 2 (nsplit 8) hoist/pref 1: 829.8 us 0.80 TB/s err 2.3e-05
+  rows BN 128 w 2 st 3 occ 2 (nsplit 8) hoist/pref 1: 753.2 us 0.88 TB/s err 2.3e-05
+  rows BN 128 w 2 st 4 occ 2 (nsplit 8) hoist/pref 1: 757.3 us 0.88 TB/s err 2.3e-05
+  rows BN 128 w 4 st 2 occ 2 (nsplit 8) hoist/pref 1: 281.5 us 2.36 TB/s err 2.3e-05
+  rows BN 128 w 4 st 3 occ 2 (nsplit 8) hoist/pref 1: 236.2 us 2.82 TB/s err 2.3e-05
+  rows BN 128 w 4 st 4 occ 2 (nsplit 8) hoist/pref 1: 237.4 us 2.80 TB/s err 2.3e-05
+  rows BN 256 w 4 st 2 occ 2 (nsplit 8) hoist/pref 1: 538.4 us 1.24 TB/s err 2.3e-05
+  rows BN 256 w 4 st 3 occ 2 (nsplit 8) hoist/pref 1: 725.4 us 0.92 TB/s err 2.3e-05
+  rows BN 256 w 4 st 4 occ 2 (nsplit 8) hoist/pref 1: 765.0 us 0.87 TB/s err 2.3e-05
+  rows BN 64 w 1 st 2 occ 2 (nsplit 8) hoist/pref 1: 568.7 us 1.17 TB/s err 2.3e-05
+  rows BN 64 w 1 st 3 occ 2 (nsplit 8) hoist/pref 1: 489.2 us 1.36 TB/s err 2.3e-05
+  rows BN 64 w 1 st 4 occ 2 (nsplit 8) hoist/pref 1: 511.7 us 1.30 TB/s err 2.3e-05
+  rows BN 128 w 1 st 2 occ 2 (nsplit 8) hoist/pref 1: 617.6 us 1.08 TB/s err 2.3e-05
+  rows BN 128 w 1 st 3 occ 2 (nsplit 8) hoist/pref 1: 641.4 us 1.04 TB/s err 2.3e-05
+  rows BN 128 w 1 st 4 occ 2 (nsplit 8) hoist/pref 1: 621.6 us 1.07 TB/s err 2.3e-05
+  rows BN 64 w 2 st 2 occ 3 (nsplit 8) hoist/pref 1: 388.0 us 1.71 TB/s err 2.3e-05
+  rows BN 64 w 2 st 3 occ 3 (nsplit 8) hoist/pref 1: 303.4 us 2.19 TB/s err 2.3e-05
+  rows BN 64 w 2 st 4 occ 3 (nsplit 8) hoist/pref 1: 312.8 us 2.13 TB/s err 2.3e-05
+  rows BN 128 w 2 st 2 occ 3 (nsplit 8) hoist/pref 1: 832.0 us 0.80 TB/s err 2.3e-05
+  rows BN 128 w 2 st 3 occ 3 (nsplit 8) hoist/pref 1: 755.1 us 0.88 TB/s err 2.3e-05
+  rows BN 128 w 2 st 4 occ 3 (nsplit 8) hoist/pref 1: 756.3 us 0.88 TB/s err 2.3e-05
+  rows BN 128 w 4 st 2 occ 3 (nsplit 8) hoist/pref 1: 280.1 us 2.37 TB/s err 2.3e-05
+  rows BN 128 w 4 st 3 occ 3 (nsplit 8) hoist/pref 1: 236.5 us 2.81 TB/s err 2.3e-05
+  rows BN 128 w 4 st 4 occ 3 (nsplit 8) hoist/pref 1: 238.0 us 2.79 TB/s err 2.3e-05
+  rows BN 256 w 4 st 2 occ 3 (nsplit 8) hoist/pref 1: 536.0 us 1.24 TB/s err 2.3e-05
+  rows BN 256 w 4 st 3 occ 3 (nsplit 8) hoist/pref 1: 724.0 us 0.92 TB/s err 2.3e-05
+  rows BN 256 w 4 st 4 occ 3 (nsplit 8) hoist/pref 1: 766.6 us 0.87 TB/s err 2.3e-05
+  rows BN 64 w 1 st 2 occ 3 (nsplit 8) hoist/pref 1: 570.4 us 1.17 TB/s err 2.3e-05
+  rows BN 64 w 1 st 3 occ 3 (nsplit 8) hoist/pref 1: 487.0 us 1.37 TB/s err 2.3e-05
+  rows BN 64 w 1 st 4 occ 3 (nsplit 8) hoist/pref 1: 509.2 us 1.31 TB/s err 2.3e-05
+  rows BN 128 w 1 st 2 occ 3 (nsplit 8) hoist/pref 1: 617.9 us 1.08 TB/s err 2.3e-05
+  rows BN 128 w 1 st 3 occ 3 (nsplit 8) hoist/pref 1: 640.9 us 1.04 TB/s err 2.3e-05
+  rows BN 128 w 1 st 4 occ 3 (nsplit 8) hoist/pref 1: 618.9 us 1.07 TB/s err 2.3e-05
+  rows BN 64 w 2 st 2 occ 4 (nsplit 16) hoist/pref 1: 267.6 us 2.48 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 4 (nsplit 16) hoist/pref 1: 234.8 us 2.83 TB/s err 0.0e+00
+  rows BN 64 w 2 st 4 occ 4 (nsplit 16) hoist/pref 1: 237.5 us 2.80 TB/s err 0.0e+00
+  rows BN 128 w 2 st 2 occ 4 (nsplit 16) hoist/pref 1: 542.3 us 1.23 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 4 (nsplit 16) hoist/pref 1: 722.1 us 0.92 TB/s err 0.0e+00
+  rows BN 128 w 2 st 4 occ 4 (nsplit 16) hoist/pref 1: 689.5 us 0.96 TB/s err 0.0e+00
+  rows BN 128 w 4 st 2 occ 4 (nsplit 16) hoist/pref 1: 277.6 us 2.40 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 4 (nsplit 16) hoist/pref 1: 234.4 us 2.84 TB/s err 0.0e+00
+  rows BN 128 w 4 st 4 occ 4 (nsplit 16) hoist/pref 1: 238.5 us 2.79 TB/s err 0.0e+00
+  rows BN 256 w 4 st 2 occ 4 (nsplit 16) hoist/pref 1: 512.0 us 1.30 TB/s err 0.0e+00
+  rows BN 256 w 4 st 3 occ 4 (nsplit 16) hoist/pref 1: 719.3 us 0.92 TB/s err 0.0e+00
+  rows BN 256 w 4 st 4 occ 4 (nsplit 16) hoist/pref 1: 756.8 us 0.88 TB/s err 0.0e+00
+  rows BN 64 w 1 st 2 occ 4 (nsplit 16) hoist/pref 1: 307.4 us 2.16 TB/s err 0.0e+00
+  rows BN 64 w 1 st 3 occ 4 (nsplit 16) hoist/pref 1: 276.9 us 2.40 TB/s err 0.0e+00
+  rows BN 64 w 1 st 4 occ 4 (nsplit 16) hoist/pref 1: 277.6 us 2.40 TB/s err 0.0e+00
+  rows BN 128 w 1 st 2 occ 4 (nsplit 16) hoist/pref 1: 364.8 us 1.82 TB/s err 0.0e+00
+  rows BN 128 w 1 st 3 occ 4 (nsplit 16) hoist/pref 1: 603.6 us 1.10 TB/s err 0.0e+00
+  rows BN 128 w 1 st 4 occ 4 (nsplit 16) hoist/pref 1: 586.4 us 1.13 TB/s err 0.0e+00
+  rows BN 64 w 2 st 2 occ 6 (nsplit 16) hoist/pref 1: 269.2 us 2.47 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 6 (nsplit 16) hoist/pref 1: 233.5 us 2.85 TB/s err 0.0e+00
+  rows BN 64 w 2 st 4 occ 6 (nsplit 16) hoist/pref 1: 236.4 us 2.81 TB/s err 0.0e+00
+  rows BN 128 w 2 st 2 occ 6 (nsplit 16) hoist/pref 1: 541.5 us 1.23 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 6 (nsplit 16) hoist/pref 1: 724.0 us 0.92 TB/s err 0.0e+00
+  rows BN 128 w 2 st 4 occ 6 (nsplit 16) hoist/pref 1: 687.7 us 0.97 TB/s err 0.0e+00
+  rows BN 128 w 4 st 2 occ 6 (nsplit 16) hoist/pref 1: 276.4 us 2.41 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 6 (nsplit 16) hoist/pref 1: 235.7 us 2.82 TB/s err 0.0e+00
+  rows BN 128 w 4 st 4 occ 6 (nsplit 16) hoist/pref 1: 239.0 us 2.78 TB/s err 0.0e+00
+  rows BN 256 w 4 st 2 occ 6 (nsplit 16) hoist/pref 1: 511.1 us 1.30 TB/s err 0.0e+00
+  rows BN 256 w 4 st 3 occ 6 (nsplit 16) hoist/pref 1: 718.4 us 0.93 TB/s err 0.0e+00
+  rows BN 256 w 4 st 4 occ 6 (nsplit 16) hoist/pref 1: 757.8 us 0.88 TB/s err 0.0e+00
+  rows BN 64 w 1 st 2 occ 6 (nsplit 16) hoist/pref 1: 308.5 us 2.16 TB/s err 0.0e+00
+  rows BN 64 w 1 st 3 occ 6 (nsplit 16) hoist/pref 1: 275.5 us 2.41 TB/s err 0.0e+00
+  rows BN 64 w 1 st 4 occ 6 (nsplit 16) hoist/pref 1: 278.4 us 2.39 TB/s err 0.0e+00
+  rows BN 128 w 1 st 2 occ 6 (nsplit 16) hoist/pref 1: 366.4 us 1.81 TB/s err 0.0e+00
+  rows BN 128 w 1 st 3 occ 6 (nsplit 16) hoist/pref 1: 611.4 us 1.09 TB/s err 0.0e+00
+  rows BN 128 w 1 st 4 occ 6 (nsplit 16) hoist/pref 1: 585.2 us 1.14 TB/s err 0.0e+00
+  rows BN 128 w 4 st 3 occ 4 (nsplit 16) hoist/pref 0: 298.2 us 2.23 TB/s err 0.0e+00
+  rows BN 128 w 2 st 3 occ 4 (nsplit 16) hoist/pref 0: 239.1 us 2.78 TB/s err 0.0e+00
+  rows BN 64 w 2 st 3 occ 16 (nsplit 64) hoist/pref 1: 242.2 us 2.75 TB/s err 8.7e-06
+  rows BN 64 w 2 st 2 occ 16 (nsplit 64) hoist/pref 1: 266.0 us 2.50 TB/s err 8.7e-06
+batch 32 q_len 8 full: K+V 665.0 MB (4.8 TB/s floor 138.5 us)
+  attn_fv occ 1 (nsplit 4): 405.4 us 1.64 TB/s err 0.0e+00
+  attn_fv occ 2 (nsplit 8): 321.8 us 2.07 TB/s err 5.9e-04
+  attn_fv occ 3 (nsplit 8): 321.0 us 2.07 TB/s err 5.9e-04
+  attn_fv occ 4 (nsplit 16): 320.3 us 2.08 TB/s err 7.0e-04
+  attn_fv occ 6 (nsplit 16): 327.2 us 2.03 TB/s err 7.0e-04
+  attn_fv occ 8 (nsplit 32): 329.2 us 2.02 TB/s err 7.2e-04
+  attn_fv occ 12 (nsplit 64): 337.3 us 1.97 TB/s err 7.5e-04
+v24d diag: done in 81 s

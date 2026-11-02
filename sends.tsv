@@ -96,3 +96,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit
 2026-11-02 10:42:36	check	f2fac59291494e89	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	99d1fef
 2026-11-02 14:18:26	check	7f0858a69e0b4492	muse_decode_layer	muse_decode_layer/runs/v23_fv_attn.py	01c431ab724fd10e4bba7a00113a9a9d66a3d4f46437a9ac7144d6dfee7b9b6a	8b51f37
 2026-11-02 14:26:09	check	6567d26179874f80	muse_decode_layer	muse_decode_layer/runs/v23d_bench.py	6616b215681829f1cbed12526fceaa6aaf6dcbad82033630d7d9c4364fb381ad	f878322
+2026-11-02 14:31:27	check	8bae0dfe527f4f01	muse_decode_layer	muse_decode_layer/runs/v24d_bench.py	bb9d7f907967c35833a4b3f363eaf23a54057f279bfd989175aed45678449273	08d0bdb
