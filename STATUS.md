@@ -22,6 +22,53 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Oct 31 4:26-5:37 PM ET: attention v22 series, 13 jobs (records for PR #20 review r1 M1; added Nov 2)
+
+These were sent with `okc check` directly, not through tools/okc_send.py, so they had no sends.tsv rows. Their 13
+rows are now in sends.tsv, in time order. Job id, file and send time come from okc's local job log; the server's
+`created_at` matches it to the second. Outcomes come from `okc status <job> --json` (Nov 2, ~10:20 AM ET).
+The .json/.txt profiles were restored and are committed. **The .log profiles were lost in the Oct 31 ~5:43 PM ET box
+move (0 bytes)** and are not committed.
+
+Counting: 12 checks of runs/v22_cuda_fv.py plus 1 diagnostic of runs/v22d_dbg.py (3934b18d) make 13 jobs and 9
+profiles. The review's "12 jobs, 8 with profiles" counts v22_cuda_fv.py only.
+- 8 scored, and b9586ff0 was the best of them.
+- 3 failed correctness. Each was 14/16: tests 5 and 7, the two full-verify b >= 2 tests, failed, so nothing was timed.
+- 1 was a judge duplicate and did not run.
+
+The PR's earlier "one failed, two diagnostics" was wrong; there was 1 diagnostic and 3 failures. 51a55997 (76c1adc) was the
+V^T head-offset bug fixed in 5039724.
+
+sha256: okc's `content_hash` is not the file's sha256: for b9586ff0 it is 0021f802..., while the committed file is
+8ee72590..., and the same holds for okc_send-recorded jobs. So the server cannot confirm file hashes. The sha256 values in
+these rows are **inferred** from the file at the commit made in the same second as each send, and marked so in
+sends.tsv. Supporting evidence: every committed job has a distinct content_hash, and the duplicate shares its original's.
+
+Record caveats:
+- **6d90f6e3e9784df6 (5:09:44 PM ET) was sent with no commit at its send time**: none falls between 6f46165
+  (5:05:29 PM) and 10575fb (5:13:18 PM). The judge marked it `duplicate_of` 469a11da (same content_hash), so the bytes
+  it sent were the same as 469a11da's (6f46165), and it consumed no run.
+- **b9586ff0's commit time equals its send time** (5039724, 5:36:32 PM ET). The same is true of every committed v22
+  job: each was committed in the same second as its send, or 1 s before.
+- v22d_dbg.py (3934b18d) was never committed and the file is not on the box. Its sha256 is UNKNOWN; only okc's content_hash
+  f9d0b032... is known.
+
+| time (ET) | job | file | commit | okc content_hash[:12] | outcome |
+|---|---|---|---|---|---|
+| 16:26:20 | b0d7d09101e64fd2 | v22_cuda_fv.py | 179fdd4 | f0633f4366af | 1.254x (1.235-1.273), 16/16 |
+| 16:34:54 | 6939558c645240ab | v22_cuda_fv.py | 93a54cb | 00c9410f8a87 | 1.267x (1.248-1.291), 16/16 |
+| 16:44:02 | 833763a0bb304f7b | v22_cuda_fv.py | dceb08d | 6b4dd6856dd8 | FAILED correctness 14/16, not timed: test 5 (b2 ctx 100000 full verify page 1): rel L2 1.408e+00 > 0.15; test 7 (b4 ctx 6000 full verify edges): rel L2 1.416e+00 > 0.15 |
+| 16:46:38 | 3934b18d3d704157 | v22d_dbg.py | uncommitted | f9d0b032dbdd | 1.337x (1.317-1.357), 16/16 |
+| 16:52:56 | c8500ee5eeb04de7 | v22_cuda_fv.py | 3f0c0d5 | c89cc1cc2921 | FAILED correctness 14/16, not timed: test 5 (b2 ctx 100000 full verify page 1): rel L2 1.410e+00 > 0.15; test 7 (b4 ctx 6000 full verify edges): rel L2 1.408e+00 > 0.15 |
+| 16:58:47 | defbcb21ce084f78 | v22_cuda_fv.py | d300793 | 20fc1d3cb8bd | 1.368x (1.347-1.388), 16/16 |
+| 17:05:29 | 469a11daeb4749bb | v22_cuda_fv.py | 6f46165 | 55a165fc9506 | 1.381x (1.360-1.402), 16/16 |
+| 17:09:44 | 6d90f6e3e9784df6 | v22_cuda_fv.py | uncommitted | 55a165fc9506 | not run: judge dedup, identical content to 469a11daeb4749bb |
+| 17:13:19 | 87d219d56a4d4a6d | v22_cuda_fv.py | 10575fb | fa2db01fa1ab | 1.423x (1.401-1.444), 16/16 |
+| 17:19:52 | 7a98fe19e6294071 | v22_cuda_fv.py | 7c77e6b | bc3509774be2 | 1.368x (1.348-1.389), 16/16 |
+| 17:27:07 | 23257bf83b0e4dbd | v22_cuda_fv.py | b5a17a6 | a89f08368885 | 1.415x (1.394-1.436), 16/16 |
+| 17:34:05 | 51a559973ef14097 | v22_cuda_fv.py | 76c1adc | c1623e126491 | FAILED correctness 14/16, not timed: test 5 (b2 ctx 100000 full verify page 1): rel L2 1.306e+00 > 0.15; test 7 (b4 ctx 6000 full verify edges): NaN/Inf |
+| 17:36:32 | b9586ff0a9db47f0 | v22_cuda_fv.py | 5039724 | 0021f80226b7 | 1.433x (1.412-1.460), 16/16 |
+
 ## Oct 31 ~6:00-7:00 PM ET: attention v22 (PR #20), review r1 fixes (CHANGES REQUESTED by Senior Larper)
 
 What v22 really gained (review m1). Check b9586ff0a9db47f0 scored **1.433x (95% CI 1.412-1.460)** against v20b's
@@ -30,8 +77,8 @@ What v22 really gained (review m1). Check b9586ff0a9db47f0 scored **1.433x (95% 
   replaces move the overall 1.4057 -> 1.4154 when the other shapes are held at v20b's times.
 - **Most of 1.433 is noise**: shapes v22 does not touch (dp heads, b1, sliding, decode; byte-identical v20b code)
   ran 0.7-3.9% faster in that run than in v20b's check.
-- **Selection**: b9586ff0 was the best of 8 scored v22 runs (12 v22-series checks in all; the records section,
-  pending OKC_TOKEN, lists each one's outcome). Its CI lower bound clears the board's CI upper bound 1.409 by only ~0.0028.
+- **Selection**: b9586ff0 was the best of 8 scored v22 runs (12 v22_cuda_fv.py checks in all: 8 scored, 3 failed
+  correctness, 1 judge duplicate; see the records section above). Its CI lower bound clears the board's CI upper bound 1.409 by only ~0.0028.
 - So a re-check of v22 may well land near ~1.41-1.42x (an estimate from the kernel-only figure), i.e. not clearly
   above 1.409.
 
