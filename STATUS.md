@@ -24,6 +24,18 @@ decode-v13-fused (base attn-fused): v13, for review.
 
 
 
+
+## Nov 4 ~2:45 AM ET: decode v26p projection diag (branch decode-v26): no projection lever with the current kernels
+
+tools/build_decode_v26p.py -> runs/v26p_bench.py (kernel_fn = v25; untimed in-prepare sweep, cold L2, median of 15,
+judge weights). Diag check 7140d1f5cb8d4210: 1.394x (95% 1.373-1.414) for v25's kernel_fn, as expected (diagnostic,
+not a candidate). Current path vs best of 48 _swapab_gemm configs (BN 32/64/128, BK 128/256, split 1/2/4/8, stages 3/4):
+- qkv_gate m 1/8/16/32: cuBLAS 18.3 / 17.7 / 17.6 / 17.8 us; best Triton 20.2 / 20.2 / 19.8 / 21.1: cuBLAS stays.
+- o m 1-32: PROJ_CFG 10.3-10.5 us; best 10.2-10.5 (<= 0.2 us).
+- pooler m 1/8/16/32: 23.7 / 23.8 / 23.8 / 25.5 us -> (64, 256, 1, 4, 4) 23.2 / 23.2 / 23.2 / 24.2 (0.5-1.3 us).
+- unpooler m 16/32: cuBLAS 22.4 / 22.6 -> 21.9 / 22.2 (~0.5 us); sliced unpooler m 1/8: cuBLAS 10.8 / 10.9, Triton >= 13.1.
+Total available across the 4 projections: ~1-2 us per small-T shape (< 1%), inside the check noise. Not built.
+
 ## Nov 4 ~2:05 AM ET: decode v26 / MoE v28 (ldmatrix B fragments in moe_mma GEMM 2): no gain, no PR (branch decode-v26)
 
 tools/build_decode_v26.py: moe_mma's non-GATED build (GEMM 2) loads B fragments with ldmatrix.x4 ("memory" clobber)
@@ -1005,3 +1017,4 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-04 00:40:46 | cf28ddbfd37d408d | muse_decode_layer | check | v25_ws4_fv.py | 6808c83193888e3e | a3e52e8 | 1.409x (1.388-1.430), passed=True |  |
 | 2026-11-04 01:42:14 | b4aba533c7a0461b | muse_decode_layer | check | v26_ldsm.py | 24de89440bee22b2 | c7c7cc6 | 1.372x (1.352-1.393), passed=True |  |
 | 2026-11-04 01:42:14 | 70a7381b02f343cc | muse_moe_w4a16 | check | v28_ldsm.py | 9932fab4d0ad76ff | 8bfe761 | 1.539x (1.516-1.562), passed=True |  |
+| 2026-11-04 02:29:21 | 7140d1f5cb8d4210 | muse_decode_layer | check | v26p_bench.py | 10100cf242075dcd | 77ae493 | 1.394x (1.373-1.414), passed=True |  |
