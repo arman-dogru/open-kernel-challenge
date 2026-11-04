@@ -1,4 +1,5 @@
-# Randomized interleaving model of attn_fvws's mbarrier / named-barrier protocol.
+# Randomized interleaving model of attn_fvws's mbarrier / named-barrier protocol (v25e: NPW producer warps, CBAR
+# CTA-wide consumer barriers).
 # Checks: (a) a stage is never overwritten while any consumer warp may still read it (K by S(i) wgmma until the warp's
 # wait, V by the transpose); (b) consumers never read a stage before all 32 producer lanes' copies landed;
 # (c) the V^T buffer (per head, i & 1) is never rewritten while P.V(i - 2) may still read it; (d) no deadlock.
@@ -10,43 +11,45 @@ class MBar:
         assert s.pending >= 0
         if s.pending == 0: s.phase += 1; s.pending = s.count
     def done(s, parity): return (s.phase & 1) != parity  # try_wait.parity: phase with that parity completed
-def run(ntiles, ST, seed):
+def run(ntiles, ST, seed, NPW=1, CBAR=0):
     rnd = random.Random(seed)
-    full = [MBar(32) for _ in range(ST)]; empty = [MBar(8) for _ in range(ST)]
+    full = [MBar(32 * NPW) for _ in range(ST)]; empty = [MBar(8) for _ in range(ST)]
     stage_tile = [None] * ST          # tile whose data lands / sits in the stage
     readers = [set() for _ in range(ST)]  # consumer warps that may still read the stage
-    landed = [0] * ST
+    landed = [dict() for _ in range(ST)]  # stage -> {tile: copies landed}
     inflight = []                     # (lane, stage) copies not yet landed (noinc arrive fires when landed)
     vt_readers = {}                   # (h, buf) -> set of warps whose P.V on it may be outstanding
     namedbar = {0: set(), 1: set()}
     procs = []
-    def producer():
+    def producer(pw):
         stg = ph = 0
         for i in range(ntiles):
             if i >= ST:
                 while not empty[stg].done(ph ^ 1): yield
             assert not readers[stg], f"stage {stg} overwritten while read by {readers[stg]}"
-            stage_tile[stg] = i; landed[stg] = 0
-            for lane in range(32): inflight.append((lane, stg)); yield
+            stage_tile[stg] = i
+            for lane in range(32): inflight.append((lane, stg, i)); yield
             stg += 1
             if stg == ST: stg = 0; ph ^= 1
     def lander():
         while True:
             if inflight and rnd.random() < 0.5:
-                lane, stg = inflight.pop(rnd.randrange(len(inflight)))
-                landed[stg] += 1; full[stg].arrive()
+                lane, stg, t = inflight.pop(rnd.randrange(len(inflight)))
+                assert not readers[stg], f"copy of tile {t} lands in stage {stg} while read by {readers[stg]}"
+                landed[stg][t] = landed[stg].get(t, 0) + 1; full[stg].arrive()
             yield
     def bar(h, w):
+        h = 0 if CBAR else h
         gen = len(namedbar_gen[h])
         namedbar[h].add(w)
-        if len(namedbar[h]) == 4: namedbar_gen[h].append(1); namedbar[h].clear()
+        if len(namedbar[h]) == (8 if CBAR else 4): namedbar_gen[h].append(1); namedbar[h].clear()
         while len(namedbar_gen[h]) == gen: yield
     def consumer(w):
         h = w >> 2; st = ph = 0
         pv_out = None  # buffer my outstanding P.V reads
         for i in range(ntiles):
             while not full[st].done(ph): yield
-            assert landed[st] == 32 and stage_tile[st] == i, "read before landing"
+            assert landed[st].get(i, 0) == 32 * NPW and stage_tile[st] == i, "read before landing"
             yield from bar(h, w)
             readers[st].add(w)  # S(i) wgmma (K) + transpose (V) read the stage
             buf = i & 1
@@ -75,7 +78,7 @@ def run(ntiles, ST, seed):
                 if len(ws) == 4:
                     vt_readers[(h, buf)] -= set(range(4 * h, 4 * h + 4)); del waited[(h, i, buf)]
             yield
-    ps = [producer()] + [consumer(w) for w in range(8)]
+    ps = [producer(pw) for pw in range(NPW)] + [consumer(w) for w in range(8)]
     slow = rnd.choice(ps)
     alive = list(ps); bg = [lander(), janitor()]
     steps = 0
@@ -88,8 +91,9 @@ def run(ntiles, ST, seed):
         except StopIteration: alive.remove(p)
     return steps
 n = 0
-for ST in (2, 3, 4):
-    for ntiles in (0, 1, 2, 3, 5, 9):
-        for seed in range(150):
-            run(ntiles, ST, seed); n += 1
+for NPW, CBAR in ((1, 0), (1, 1), (2, 0), (2, 1), (4, 0), (4, 1)):
+    for ST in (2, 3, 4, 6):
+        for ntiles in (0, 1, 2, 3, 5, 9):
+            for seed in range(60):
+                run(ntiles, ST, seed, NPW, CBAR); n += 1
 print(f"protocol model: {n} randomized runs, no hazard / deadlock")

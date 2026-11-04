@@ -87,7 +87,11 @@ __device__ __forceinline__ unsigned pack_e4(float x0, float x1, float x2, float 
   return (unsigned)lo | ((unsigned)hi << 16);
 }
 
+#ifdef MAXR
+extern "C" __global__ void __maxnreg__(MAXR)  // v25e diag: register cap ablation
+#else
 extern "C" __global__ void __launch_bounds__(256, 2)
+#endif
 attn_fv(const unsigned char* __restrict__ q, int stride_qt, const unsigned char* __restrict__ kc,
         const unsigned char* __restrict__ vc, const int* __restrict__ pt, int stride_pt,
         const int* __restrict__ seqlens, const float* __restrict__ ksp, const float* __restrict__ vsp,

@@ -56,7 +56,29 @@ def _fv_smem(st, vt1=None):
         128 if vt1 & 64 else 0)  # K + V E4M3 stages, V^T buffers (72 rows), Q, alignment (+ WS mbarriers)
 
 
-FV_SMEM = _fv_smem(FV_ST)''')
+FV_SMEM = _fv_smem(FV_ST)
+
+
+def _wsf(abl=0, npw=1, cbar=0, maxr=0, smr=0, ws=1):
+    """v25e flags: 64 (attn_fvws) | WSABL << 7 | log2(NPW) << 14 | CBAR << 16 | MAXR / 8 << 17 | SMR / 8 << 22.
+    ws=0: attn_fv (v24's kernel) with only MAXR (register-cap ablation)."""
+    return (64 if ws else 0) | abl << 7 | {{1: 0, 2: 1, 4: 2}}[npw] << 14 | cbar << 16 | (maxr // 8) << 17 | (smr // 8) << 22
+
+
+def _ws_npw(vt1):
+    return 1 << ((vt1 >> 14) & 3)
+
+
+def _ws_opts(vt1):
+    o = [f"-DMAXR={{((vt1 >> 17) & 31) * 8}}".encode()] if (vt1 >> 17) & 31 else []
+    if vt1 & 64:
+        o += [f"-DWSABL={{(vt1 >> 7) & 127}}".encode()] if (vt1 >> 7) & 127 else []
+        o += [f"-DNPW={{_ws_npw(vt1)}}".encode()] if _ws_npw(vt1) > 1 else []
+        o += [b"-DCBAR=1"] if (vt1 >> 16) & 1 else []
+        o += [f"-DSMR={{((vt1 >> 22) & 31) * 8}}".encode()] if (vt1 >> 22) & 31 else []
+    return o
+
+''')
 
 s = rep(s, '''def _fv_cubin():
     """NVRTC (cuda.bindings, in-process) -> sm_90a cubin bytes (no files). Host-only, no CUDA calls."""
@@ -67,7 +89,7 @@ s = rep(s, '''def _fv_cubin():
     if ("cubin", st, vt1) not in _FV:''')
 s = rep(s, '''        opts = [b"-arch=sm_90a", b"-std=c++17"]''', '''        opts = [b"-arch=sm_90a", b"-std=c++17", f"-DST={st}".encode()] + ([b"-DVT1=1"] if vt1 & 1 else []) + (
             [f"-DFVSKIP={(vt1 >> 1) & 3}".encode()] if (vt1 >> 1) & 3 else []) + (
-            [f"-DPF={(vt1 >> 3) & 7}".encode()] if (vt1 >> 3) & 7 else [])  # vt1 = VT1 | FVSKIP << 1 (diag) | PF << 3 | WS 64''')
+            [f"-DPF={(vt1 >> 3) & 7}".encode()] if (vt1 >> 3) & 7 else []) + _ws_opts(vt1)  # vt1 = VT1 | FVSKIP << 1 (diag) | PF << 3 | WS 64 | v25e (_wsf)''')
 s = rep(s, '''        _FV["cubin"] = cubin
     return _FV["cubin"]''', '''        _FV[("cubin", st, vt1)] = cubin
     return _FV[("cubin", st, vt1)]''')
@@ -108,7 +130,7 @@ s = rep(s, '''    path = _attn_path(kind, L, batch, hkv, d)
 s = rep(s, '''        err, prog = nvrtc.nvrtcCreateProgram(_FV_SRC.encode(), b"attn_fv.cu", 0, [], [])''',
         '''        err, prog = nvrtc.nvrtcCreateProgram((_WS_SRC if vt1 & 64 else _FV_SRC).encode(), b"attn_fv.cu", 0, [], [])''')
 s = rep(s, '''            f = mod.get_function("attn_fv")''', '''            f = mod.get_function("attn_fvws" if vt1 & 64 else "attn_fv")''')
-s = rep(s, '''        f((nsplit, batch), (256,), (''', '''        f((nsplit, batch), (288 if vt1 & 64 else 256,), (''')
+s = rep(s, '''        f((nsplit, batch), (256,), (''', '''        f((nsplit, batch), (256 + 32 * _ws_npw(vt1) if vt1 & 64 else 256,), (''')
 
 head = ('''# okc: problem=muse_attention_decode
 """''' + name + ''': v24 + attention v25 source (tools/build_attn_v25.py): the full-verify kernel from tools/attn_v25_fv.cu
@@ -197,6 +219,10 @@ WS_EXACT_TOL = 0.0   # max |ws - v24| at the same split count / ST (same smem by
 WS_SPLIT_TOL = 2e-2  # rel-L2 of any (ST, splits) output vs v24's default config (split order changes bf16 rounding)
 
 
+_V25_VAL_FLAGS = (64, _wsf(cbar=1), _wsf(npw=2, cbar=1, maxr=96), _wsf(npw=4, maxr=80, smr=104),
+                  _wsf(npw=4, cbar=1, maxr=80, smr=104), _wsf(npw=4, cbar=1, maxr=168))  # v25e: every non-ablation WS build timed
+
+
 def _v25_validate():
     """WS kernel (flags 64) vs v24's FV kernel (judge-validated) at the same ST and split count: bit-exact expected
     (assert max |diff| <= WS_EXACT_TOL); every output finite and within WS_SPLIT_TOL rel-L2 of v24 at its default
@@ -225,19 +251,22 @@ def _v25_validate():
         base = run(FV_ST, FV_OCC, 0)
         for occ in ((1, 2, 4, 8, 33) if batch < 16 else (2, 4)):
             for st in (3, 2):
-                v24o, wso = run(st, occ, 0), run(st, occ, 64)
-                torch.cuda.synchronize()
-                dmax = float((wso - v24o).abs().max())
-                rel = float((wso - base).norm() / base.norm().clamp_min(1e-30))
-                fin = bool(torch.isfinite(wso).all())
-                n += 1
-                try:
-                    assert fin, "non-finite"
-                    assert dmax <= WS_EXACT_TOL, f"max|ws-v24| {dmax:.3e} > {WS_EXACT_TOL}"
-                    assert rel <= WS_SPLIT_TOL, f"rel-L2 vs v24 default {rel:.2e} > {WS_SPLIT_TOL}"
-                except AssertionError as e:
-                    bad += 1
-                    print(f"  WS FAIL b {batch} ctx {ctx} page {page} {spread} kvs {kvs} occ {occ} st {st}: {e}", flush=True)
+                v24o = run(st, occ, 0)
+                for fl in _V25_VAL_FLAGS:
+                    wso = run(st, occ, fl)
+                    torch.cuda.synchronize()
+                    dmax = float((wso - v24o).abs().max())
+                    rel = float((wso - base).norm() / base.norm().clamp_min(1e-30))
+                    fin = bool(torch.isfinite(wso).all())
+                    n += 1
+                    try:
+                        assert fin, "non-finite"
+                        assert dmax <= WS_EXACT_TOL, f"max|ws-v24| {dmax:.3e} > {WS_EXACT_TOL}"
+                        assert rel <= WS_SPLIT_TOL, f"rel-L2 vs v24 default {rel:.2e} > {WS_SPLIT_TOL}"
+                    except AssertionError as e:
+                        bad += 1
+                        if bad <= 20:
+                            print(f"  WS FAIL flags {fl} b {batch} ctx {ctx} page {page} {spread} kvs {kvs} occ {occ} st {st}: {e}", flush=True)
         del data
     print(f"v25 WS validate: {'PASS' if bad == 0 and n else 'FAIL'} {n - bad}/{n} (bit-exact vs v24 FV at equal splits,"
           f" rel-L2 <= {WS_SPLIT_TOL} vs v24 default) in {time.time() - t0:.0f} s", flush=True)
@@ -335,7 +364,17 @@ def _v25_diag():
         tb = timed(lambda: kernel_fn(data))
         res = []
         if L == 8:
-            cands = [(3, 4, 0), (3, 2, 64), (3, 3, 64), (3, 4, 64), (2, 2, 64), (2, 4, 64)]  # (ST, splits/SM, flags; 64 = WS)
+            W = _wsf
+            cands = [(3, 4, 0), (3, 4, W(maxr=112, ws=0)), (3, 4, 2), (3, 4, 4),  # v24; v24 at 112 regs; FVSKIP 1 / 2
+                     (3, 3, 64), (3, 3, W(abl=1)), (3, 3, W(abl=2)), (3, 3, W(abl=3)), (3, 3, W(abl=32)),
+                     (3, 3, W(abl=4)), (3, 3, W(abl=8)), (3, 3, W(abl=12)), (3, 3, W(abl=16)), (3, 3, W(abl=64)),
+                     (3, 3, W(cbar=1)), (3, 3, W(abl=1, cbar=1)),
+                     (3, 3, W(npw=2, maxr=96)), (3, 3, W(npw=2, cbar=1, maxr=96)),
+                     (3, 3, W(npw=4, maxr=80, smr=104)), (3, 3, W(npw=4, cbar=1, maxr=80, smr=104)),
+                     (3, 4, W(npw=4, cbar=1, maxr=80, smr=104)), (3, 2, W(npw=4, cbar=1, maxr=80, smr=104)),
+                     (3, 3, W(abl=2, npw=4, maxr=80, smr=104)), (3, 3, W(abl=1, npw=4, maxr=80, smr=104)),
+                     (6, 2, W(npw=4, cbar=1, maxr=168))]  # (ST, splits/SM, flags: 64 = WS, _wsf = v25e knobs)
+            t1 = time.time()
             for st, occ, vt1 in cands:
                 def fn(st=st, occ=occ, vt1=vt1):
                     cfg = data["config"]
@@ -349,6 +388,7 @@ def _v25_diag():
                     res.append((timed(fn), err, ("fv", st, occ, vt1)))
                 except Exception as e:
                     print(f"  b {batch} L {L} fv {st} {occ} {vt1} FAILED {repr(e)[:200]}", flush=True)
+            print(f"  ({len(cands)} fv variants in {time.time() - t1:.0f} s)", flush=True)
             # gather microbenchmark (tools/attn_v25_gbench.cu): kernel alone, no rope / combine
             for kind, gst, npw, pad, occ in ():  # v25d7: cp.async 1 / 2 / 4 warps 104 / 97 / 93 us, TMA bulk 171+ (b16 L8)
                 try:
@@ -374,7 +414,7 @@ def _v25_diag():
         res.sort()
         print(f"b {batch} L {L}: {nbytes / 1e6:.0f} MB K+V, v24 {tb:.1f} us ({nbytes / max(tb - floor, 1e-3) / 1e6:.2f} TB/s)"
               f" | best {res[0][0]:.1f} us {res[0][2]} e{res[0][1]:.1e}", flush=True)
-        print("  " + "; ".join(f"{c} {t:.1f} e{e:.0e}" for t, e, c in res[:12]), flush=True)
+        print("  " + "; ".join(f"{c} {t:.1f} e{e:.0e}" for t, e, c in res[:40]), flush=True)
         summ.append((batch, L, tb, res[0][0], res[0][2]))
         del data
     print("v25d summary (b L: v24 / best us, cfg): " + "; ".join(f"{b} {l}: {a:.1f} / {c:.1f} {p}" for b, l, a, c, p in summ),

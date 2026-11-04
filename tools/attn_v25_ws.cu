@@ -21,6 +21,26 @@
 #ifndef ST
 #define ST 3  // cp.async stages: ST - 1 tiles (16 KB each) in flight per CTA
 #endif
+// v25e knobs (defaults = the v25d8 kernel, same cubin):
+#ifndef NPW
+#define NPW 1  // producer warps (8 .. 8 + NPW - 1); NPW 2 / 4 split each lane's 16 cp.async instructions per tile
+#endif
+#ifndef CBAR
+#define CBAR 0  // 1: both consumer barriers CTA-wide over the 256 consumer threads (v24's __syncthreads structure)
+#endif
+#ifndef MAXR
+#define MAXR 112  // __maxnreg__; 2 CTAs/SM need (256 + 32 NPW) x 2 x MAXR <= 64K
+#endif
+#ifndef SMR
+#define SMR 0  // NPW 4 only: setmaxnreg (producer warpgroup -> 24, consumers -> SMR registers)
+#endif
+#ifndef WSABL
+#define WSABL 0  // diagnostic ablations (timing only, results wrong): 1 no gather (producer issues no cp.async),
+                 // 2 no consumer compute (no Q.K / transpose / softmax / P.V), 4 no loop-top barrier, 8 no barrier
+                 // after the transpose, 16 test_wait spin instead of try_wait, 32 no softmax / P.V (Q.K + transpose
+                 // kept), 64 no fence.proxy.async after the "full" wait
+#endif
+#define NT (256 + 32 * NPW)
 #define QH 8192  // Q bytes per KV head in shared memory: 64 rows x 128 B (64 used), 128-byte swizzle
 #define KROW 128
 #define VTH 9216  // V^T bytes per head: 64 dims + 8 rows of ones (row sums of P) x 128-byte rows, 128-byte swizzle
@@ -65,8 +85,13 @@ __device__ __forceinline__ void mbar_init(unsigned addr, unsigned count) {
   asm volatile("mbarrier.init.shared::cta.b64 [%0], %1;" :: "r"(addr), "r"(count) : "memory");
 }
 __device__ __forceinline__ void mbar_wait(unsigned addr, unsigned parity) {
+#if WSABL & 16
+  asm volatile("{\n .reg .pred p;\n WS_WAIT:\n mbarrier.test_wait.parity.shared::cta.b64 p, [%0], %1;\n @!p bra WS_WAIT;\n}"
+               :: "r"(addr), "r"(parity) : "memory");
+#else
   asm volatile("{\n .reg .pred p;\n WS_WAIT:\n mbarrier.try_wait.parity.shared::cta.b64 p, [%0], %1;\n @!p bra WS_WAIT;\n}"
                :: "r"(addr), "r"(parity) : "memory");
+#endif
 }
 __device__ __forceinline__ void mbar_arrive(unsigned addr) {
   asm volatile("mbarrier.arrive.shared::cta.b64 _, [%0];" :: "r"(addr) : "memory");
@@ -75,8 +100,12 @@ __device__ __forceinline__ void cp_arrive_noinc(unsigned addr) {
   asm volatile("cp.async.mbarrier.arrive.noinc.shared::cta.b64 [%0];" :: "r"(addr) : "memory");
 }
 __device__ __forceinline__ void wg_bar(int h) {  // named barrier 1 + h over warpgroup h (immediate ids: ptxas reserves 2)
+#if CBAR
+  asm volatile("bar.sync 1, 256;" ::: "memory");  // all 8 consumer warps (the producer warps never join)
+#else
   if (h) asm volatile("bar.sync 2, 128;" ::: "memory");
   else asm volatile("bar.sync 1, 128;" ::: "memory");
+#endif
 }
 __device__ __forceinline__ float ex2(float x) { float y; asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x)); return y; }
 __device__ __forceinline__ unsigned pack_e4(float x0, float x1, float x2, float x3) {  // bytes x0 (low) .. x3
@@ -86,7 +115,7 @@ __device__ __forceinline__ unsigned pack_e4(float x0, float x1, float x2, float 
   return (unsigned)lo | ((unsigned)hi << 16);
 }
 
-extern "C" __global__ void __maxnreg__(112)  // 2 CTAs/SM: 9 warps x 2 x 32 x 112 <= 64K registers
+extern "C" __global__ void __maxnreg__(MAXR)  // 2 CTAs/SM: 9 warps x 2 x 32 x 112 <= 64K registers (NPW 1)
 attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned char* __restrict__ kc,
         const unsigned char* __restrict__ vc, const int* __restrict__ pt, int stride_pt,
         const int* __restrict__ seqlens, const float* __restrict__ ksp, const float* __restrict__ vsp,
@@ -157,20 +186,32 @@ attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned cha
 #pragma unroll
   for (int n = 0; n < 9; ++n) { oacc[n][0] = oacc[n][1] = oacc[n][2] = oacc[n][3] = 0.f; }
   float m0 = NEG, m1 = NEG;
-  for (int k = tid; k < 2 * 2 * 8 * 8; k += 288) {  // ones rows: 2 buffers x 2 heads x 8 rows x 8 chunks (E4M3 1.0)
+  for (int k = tid; k < 2 * 2 * 8 * 8; k += NT) {  // ones rows: 2 buffers x 2 heads x 8 rows x 8 chunks (E4M3 1.0)
     const int buf_head = k >> 6, rr = (k >> 3) & 7, c = k & 7;
     *(uint4*)(Vt + buf_head * VTH + (64 + rr) * 128 + c * 16) = make_uint4(0x38383838u, 0x38383838u, 0x38383838u, 0x38383838u);
   }
 
   if (tid == 0) {
 #pragma unroll
-    for (int k = 0; k < ST; ++k) { mbar_init(FULL(k), 32); mbar_init(EMPTY(k), 8); }
+    for (int k = 0; k < ST; ++k) { mbar_init(FULL(k), 32 * NPW); mbar_init(EMPTY(k), 8); }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
   asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // Q / ones rows (st.shared) -> wgmma
   __syncthreads();
 
+#if NPW == 1
   if (warp == 8) {  // producer warp
+#else
+  if (warp >= 8) {  // producer warps
+#endif
+#if SMR
+    asm volatile("setmaxnreg.dec.sync.aligned.u32 24;" ::: "memory");
+#endif
+#if NPW == 1
+    const int pwi = 0;
+#else
+    const int pwi = warp - 8;
+#endif
     const int pk = lane >> 3, pc = lane & 7;  // instruction j: key pk + 4 j, 16-byte chunk pc of its K and V rows
     auto prow = [&](int tile, int k) -> int {
       const int t = lo + tile * BN + k;
@@ -184,14 +225,19 @@ attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned cha
       if (i >= ST) mbar_wait(EMPTY(stg), ph ^ 1);  // tile i - ST (same stage) consumed by all 8 consumer warps
       const unsigned kd = ks_base + stg * TILE, vd = vs_base + stg * TILE;
 #pragma unroll
-      for (int j = 0; j < 16; ++j) {
+      for (int jj = 0; jj < 16 / NPW; ++jj) {
+        const int j = pwi * (16 / NPW) + jj;  // NPW 1: j = jj
         const int key = pk + 4 * j;
         const int row = __shfl_sync(0xffffffffu, j < 8 ? ra : rb, key & 31);
         const unsigned off = key * KROW + ((pc ^ (key & 7)) << 4);
         const int n = row >= 0 ? 16 : 0;
         const long long r = (long long)(row >= 0 ? row : 0) * KROW + pc * 16;
+#if !(WSABL & 1)
         cp16(kd + off, kc + r, n);
         cp16(vd + off, vc + r, n);
+#else
+        if (n == 12345) cp16(kd + off, kc + r, n);  // never: keeps the address math live
+#endif
       }
       cp_arrive_noinc(FULL(stg));
       ra = na; rb = nb;
@@ -201,21 +247,33 @@ attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned cha
     return;
   }
 
+#if SMR
+  asm volatile("setmaxnreg.inc.sync.aligned.u32 %0;" :: "n"(SMR) : "memory");
+#endif
   const unsigned qs = smem_u32(Qs + h * QH);
   const unsigned ks_base = smem_u32(Ks), vs_base = smem_u32(Vs), vt_base = smem_u32(Vt);
   int st = 0, ph = 0;  // stage of tile i and its "full" phase parity
   for (int i = 0; i < ntiles; ++i) {
     mbar_wait(FULL(st), ph);
+#if !(WSABL & 64)
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // producer's cp.async data -> wgmma (async proxy)
+#endif
+#if !(WSABL & 4)
     wg_bar(h);  // every warp of this warpgroup is past tile i - 1's waits: V^T buffer i & 1 (P.V(i - 2)) free
+#endif
 
     // S(i) = Q.K^T issued first, so the tensor cores run it while this warpgroup transposes V(i)
     const unsigned kt = ks_base + st * TILE + h * 64;
     float sc[8][4] = {};
+#if !(WSABL & 2)
     wg_fence();
     WG_QK_SS(sc, desc(qs, 1024, 1), desc(kt, 1024, 1), 0);
     WG_QK_SS(sc, desc(qs + 32, 1024, 1), desc(kt + 32, 1024, 1), 1);
     asm volatile("wgmma.commit_group.sync.aligned;" ::: "memory");
+#else
+    (void)kt;
+#endif
+#if !(WSABL & 2)
     {  // V tile i -> V^T[i & 1]: task = 4 dims x 4 key slots; slot 4t + 2a' + e of 32-key block <- key 8(2A + a') + 2t + e
       const unsigned vsrc = vs_base + st * TILE, vdst = vt_base + (i & 1) * 2 * VTH;
 #pragma unroll
@@ -233,11 +291,18 @@ attn_fvws(const unsigned char* __restrict__ q, int stride_qt, const unsigned cha
         asm volatile("st.shared.b32 [%0], %1;" :: "r"(vdst + tr_s[rep][3]), "r"(__byte_perm(x2, y2, 0x7632)) : "memory");
       }
     }
+#endif
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");  // V^T (st.shared) -> P.V wgmma (async proxy)
+#if !(WSABL & 8)
     wg_bar(h);
+#endif
     WG_WAIT_SO(sc, oacc);  // S(i) and the previous tile's P.V (overlapped with this tile's barrier/transpose)
     if (lane == 0) mbar_arrive(EMPTY(st));  // this warp is done with stage st (its K via S(i), its V via the transpose)
     if (++st == ST) { st = 0; ph ^= 1; }
+#if WSABL & (2 | 32)
+    if (sc[0][0] == 12345.f) oacc[0][0] += 1.f;
+    continue;
+#endif
     const int base = lo + i * BN;
     if (!(base + BN <= hi && base + BN - 1 <= pos0)) {  // edge tile: mask (warp-uniform branch)
       const int tb = base + t4 * 2;
