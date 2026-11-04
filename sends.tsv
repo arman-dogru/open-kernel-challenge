@@ -134,3 +134,4 @@ time_et	kind	job_id	problem	file	sha256	git_commit	notes
 2026-11-04 00:40:46	check	cf28ddbfd37d408d	muse_decode_layer	muse_decode_layer/runs/v25_ws4_fv.py	6808c83193888e3ed7e3aaae44f40bad5f5cffa319c9d631e734f46861df812e	a3e52e8	
 2026-11-04 01:42:14	check	b4aba533c7a0461b	muse_decode_layer	muse_decode_layer/runs/v26_ldsm.py	24de89440bee22b222b3e2b340a31c301a5b34000d2eafaa07a9550c4d574e23	c7c7cc6	
 2026-11-04 01:42:14	check	70a7381b02f343cc	muse_moe_w4a16	muse_moe_w4a16/runs/v28_ldsm.py	9932fab4d0ad76ff14c8d0a301c704da63cc44cda5b86159d0dd77804c4394f9	8bfe761	
+2026-11-04 02:29:21	check	7140d1f5cb8d4210	muse_decode_layer	muse_decode_layer/runs/v26p_bench.py	10100cf242075dcda2e6b22bbfbe5145629d8205e3ecb83fa12d73ec13544292	77ae493	
