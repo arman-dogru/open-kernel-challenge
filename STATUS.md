@@ -23,6 +23,20 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 
+
+## Nov 4 ~2:05 AM ET: decode v26 / MoE v28 (ldmatrix B fragments in moe_mma GEMM 2): no gain, no PR (branch decode-v26)
+
+tools/build_decode_v26.py: moe_mma's non-GATED build (GEMM 2) loads B fragments with ldmatrix.x4 ("memory" clobber)
+next to the MMAs, 16 -> 4 shared loads per 64-k tile at NB 2. GATED keeps the scalar loads: there ldmatrix raised spills
+under the MINB caps (tools/tests/moe_ldsm_nvrtc.py: e.g. 8 warps KS 2048 FASTSCALE 12/16 -> 72/268 B). With it, GEMM 2
+builds use +4-12 registers and have 0 spills. The decode file also folds in #26 n2 (dead NB 4 MINB branch, comments).
+- decode v26 check b4aba533c7a0461b (runs/v26_ldsm.py, sha256 24de8944...): **1.372x (95% 1.352-1.393)**, 13/13: worse than
+  v25 (check 1.409, submit 1.396). moe_mma verify 16 / 32 sliding 271-274 / 397-416 -> 285 / 452 us.
+- MoE v28 check 70a7381b02f343cc (runs/v28_ldsm.py, sha256 9932fab4...): **1.539x (95% 1.516-1.562)**, 5/5: equal to the
+  board (v26e 1.539). No gain.
+- Reading: GEMM 2 is not limited by shared-load issue slots. Also, moe_mma times on identical code moved by +-10-40 us
+  between v25's check and submit (PDL waits are included), so single-kernel deltas under ~10% are noise. Parked.
+
 ## Nov 4 ~1:00 AM ET: decode v25 (branch decode-v25), overall-board formula, leaderboard
 
 **Overall board = decode-step speedup, dominated by muse_decode_layer.** okc says the overall board "ranks by how much your
@@ -989,3 +1003,5 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-03 23:19:17 | 5ff307988ce14518 | muse_attention_decode | check | v25e1_bench.py | e418a9d252b23ff5 | 75654dc | 1.530x (1.507-1.553), passed=True |  |
 | 2026-11-03 23:38:55 | 71c0267525f7412e | muse_attention_decode | check | v25e_ws4.py | 9b289e5b57a58105 | 6b1ee7c | 1.593x (1.569-1.616), passed=True |  |
 | 2026-11-04 00:40:46 | cf28ddbfd37d408d | muse_decode_layer | check | v25_ws4_fv.py | 6808c83193888e3e | a3e52e8 | 1.409x (1.388-1.430), passed=True |  |
+| 2026-11-04 01:42:14 | b4aba533c7a0461b | muse_decode_layer | check | v26_ldsm.py | 24de89440bee22b2 | c7c7cc6 | 1.372x (1.352-1.393), passed=True |  |
+| 2026-11-04 01:42:14 | 70a7381b02f343cc | muse_moe_w4a16 | check | v28_ldsm.py | 9932fab4d0ad76ff | 8bfe761 | 1.539x (1.516-1.562), passed=True |  |
