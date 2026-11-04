@@ -22,6 +22,56 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+## Nov 3 ~11:15 PM - Nov 4 ET: attention v25e round (branch attn-v25): WS consumer-loop ablations; v25e_ws4 1.593x
+
+Board: attention v24 submitted at 1.517x (7e6f6a28c30b4688; its check a894ff98 1.535x, CI 1.512-1.558). Not submitted
+anything this round (rules: checks only; submit is Larper's / Arman's call).
+
+**Check 1, v25e1_bench diag 5ff307988ce14518 (Nov 3 23:19 ET; kernel_fn = v24): 1.530x (CI 1.507-1.553), 16/16.**
+WS validation PASS 648/648 (6 WS builds bit-exact vs v24's FV at equal splits / ST, 12 cases incl. pages 1/2/16/64,
+tiny ctx, kv_scale 1/64). Timings (us, b16 / b32 L8, FV + rope + combine, CUDA graph, cold L2):
+
+| variant (ST, splits/SM) | b16 | b32 |
+|---|---|---|
+| v24 FV (3, 4) | 169.9 | 323.4 |
+| v24 FV capped at 112 regs (`__maxnreg__(112)`) | 196.2 | 371.6 |
+| v24 FVSKIP 1 (loads + barriers only) / FVSKIP 2 (+ Q.K + transpose) | 117.1 / 130.3 | 215.7 / 251.7 |
+| WS (v25d8 kernel: 1 producer warp, 112 regs) (3, 3) | 212.1 | 400.7 |
+| WS no gather (consumer compute only) | 178.0 | 341.7 |
+| WS no consumer compute (gather + protocol) | 116.3 | 219.6 |
+| WS no gather, no compute (protocol only) | 52.7 | 90.5 |
+| WS no softmax / P.V (Q.K + transpose kept) | 142.5 | 267.3 |
+| WS no loop-top barrier / no post-transpose barrier / neither | 219.5 / 213.0 / 218.6 | 419.8 / 405.4 / 418.0 |
+| WS test_wait spin / no fence.proxy.async after "full" | 215.4 / 213.4 | 408.0 / 405.6 |
+| WS CTA-wide consumer barriers (CBAR, v24 structure) / + no gather | 219.2 / 186.2 | 417.3 / 356.6 |
+| WS NPW 2 at 96 regs (52 B spills) / + CBAR | 193.0 / 214.0 | 367.8 / 410.5 |
+| **WS NPW 4 + setmaxnreg 24 / 104 (80-reg launch)** (3, 3) | **143.4** | **267.4** |
+| same + CBAR at 3 / 2 / 4 splits/SM | 151.4 / 151.1 / 157.9 | 285.3 / 285.7 / 289.6 |
+| NPW 4 setmaxnreg: no gather / no compute | 114.6 / 123.0 | 213.4 / 232.4 |
+| NPW 4 at 168 regs, ST 6, CBAR (1 CTA/SM) (6, 2) | 200.0 | 377.6 |
+
+Conclusion: no barrier, fence or wait primitive in the WS consumer loop costs anything measurable (all within +-3%,
+dropping barriers is no faster). The WS consumer loop alone (no gather) was already 178 us, slower than all of v24,
+because **the v25d WS build (9 warps x 112 registers) fits only 1 CTA per SM**: registers are allocated per SM
+sub-partition (16K each, warp w on sub-partition w % 4); 9 warps put 3 on sub-partition 0, and 2 CTAs need
+2 x 3 x 32 x 112 = 21.5K > 16K. (The "2 CTAs/SM" comment in attn_v25_ws.cu was wrong: it counted 64K per SM.) The
+1-CTA/SM 168-reg build (200 / 378) matches. With 4 producer warps (one whole warpgroup) the CTA has 12 warps, 3 per
+sub-partition; launched at 80 registers (2 x 3 x 32 x 80 = 15K) with setmaxnreg moving the producer warpgroup to 24
+and the consumers to 104 (SASS: USETMAXREG, max R99, no local memory), 2 CTAs fit and FV drops 16-17%. v24 itself
+loses 15% when capped at 112 regs, so per-warpgroup register count also matters. Per-warpgroup barriers beat CTA-wide
+ones by ~5% in this build.
+
+**Check 2, v25e_ws4.py 71c0267525f7412e (Nov 3 23:38 ET; sha256 9b289e5b57a58105...): 1.593x (CI 1.569-1.616), 16/16.**
+kernel_fn = v24 with full verify b >= 2 on attn_fvws NPW 4 + setmaxnreg (flags 55869504, ST 3, 3 splits/SM,
+tools/attn_v25e_ws4.json). verify 16 full 170.9 -> 143.2 us (1.203 -> 1.419x), verify 32 full 325.7 -> 268.6 us
+(1.200 -> 1.444x); other shapes unchanged code. CI lower bound 1.569 clears both the board (1.517) and the 1.540 bar.
+Offline: NVRTC 0 spills / no C7515 for every timed non-ablation build (tools/tests/attn_v25e_variants_nvrtc.py),
+protocol model extended to NPW 1/2/4 x CBAR (8640 runs; mutation FULL count 32 with NPW 2 caught), CPU cmp vs v24
+maxdiff 0 (host path only; the CUDA kernel's evidence is the on-GPU 648/648 and the judge's 16/16).
+
+Code: tools/attn_v25_ws.cu knobs NPW / CBAR / MAXR / SMR / WSABL (defaults keep the v25d8 cubin 8dd45c17);
+tools/attn_v25_fv.cu MAXR (default keeps v24's cubin 8f3ec567); tools/build_attn_v25.py `_wsf` flag encoding.
+
 ## Nov 2 ~11:48 AM ET: attention v23 SUBMITTED; records round r14 (branch records-r14)
 
 - Submit **1ca1c9271e304fd8**, muse_attention_decode/runs/v23_fv_addr.py (sha256 8347529bec86eed1..., from main 1005d60,
@@ -894,3 +944,15 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-02 10:20:20 | fe141d068e594e14 | muse_attention_decode | check | v22_cuda_fv.py | d2925cb84321faea | 6b2ef88 | 1.430x (1.409-1.456), passed=True |  |
 | 2026-11-02 10:42:36 | f2fac59291494e89 | muse_attention_decode | check | v23_fv_addr.py | 8347529bec86eed1 | 99d1fef | 1.486x (1.464-1.508), passed=True |  |
 | 2026-11-02 11:47:58 | 1ca1c9271e304fd8 | muse_attention_decode | submit | v23_fv_addr.py | 8347529bec86eed1 | 1005d60 | 1.478x (1.456-1.500), passed=True |  |
+| 2026-11-02 14:48:49 | a894ff98f9d14c19 | muse_attention_decode | check | v24_rows_occ4.py | b60eca17974b936a | 308faad | 1.535x (1.512-1.558), passed=True |  |
+| 2026-11-02 16:24:27 | 7734ccf2d7c242c1 | muse_attention_decode | check | v25d_bench.py | 3b70ed3084e619ef | 60260d2 | 1.529x (1.506-1.560), passed=True |  |
+| 2026-11-02 16:33:47 | 3a109de22685401a | muse_attention_decode | check | v25d2_bench.py | df9ba5a5beb48dca | 1543c73 | 1.533x (1.510-1.564), passed=True |  |
+| 2026-11-02 16:46:50 | ef9d0a09d2eb4e95 | muse_attention_decode | check | v25d3_bench.py | 333ae44818486a96 | 0cf6eb2 | 1.517x (1.494-1.546), passed=True |  |
+| 2026-11-02 17:00:17 | 67c164b782fa4af3 | muse_attention_decode | check | v25d4_bench.py | 372586145920d3a6 | a9f6594 | 1.531x (1.508-1.560), passed=True |  |
+| 2026-11-02 17:12:27 | 308ba5803adf4164 | muse_attention_decode | check | v25d5_bench.py | e7212ca160af21c4 | a8ad6dc | 1.527x (1.504-1.554), passed=True |  |
+| 2026-11-02 17:30:41 | UNPARSED(rc=1) | muse_attention_decode | check | v25d6_bench.py | f4005568e8d7cb07 | 2b9c22c | pending (profile not saved) | okc rc=1, no job id |
+| 2026-11-02 17:31:37 | 33fb2b86ad4b47de | muse_attention_decode | check | v25d6_bench.py | b836c5f19a88a456 | 6e9b6dc | 1.538x (1.515-1.561), passed=True |  |
+| 2026-11-02 17:47:57 | 492e62094a6c4fa6 | muse_attention_decode | check | v25d7_bench.py | 968c10cc0e2cf4ec | 8dc4b69 | 1.529x (1.506-1.552), passed=True |  |
+| 2026-11-02 18:00:22 | ec7c393618114a7a | muse_attention_decode | check | v25d8_bench.py | 364f48015a694e59 | b0e7eab | 1.522x (1.500-1.545), passed=True |  |
+| 2026-11-03 23:19:17 | 5ff307988ce14518 | muse_attention_decode | check | v25e1_bench.py | e418a9d252b23ff5 | 75654dc | 1.530x (1.507-1.553), passed=True |  |
+| 2026-11-03 23:38:55 | 71c0267525f7412e | muse_attention_decode | check | v25e_ws4.py | 9b289e5b57a58105 | 6b1ee7c | 1.593x (1.569-1.616), passed=True |  |
