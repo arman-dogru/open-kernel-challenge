@@ -48,6 +48,25 @@ attn_v25e_variants_nvrtc.py: shipped build cubin 1c894397, 80 regs, identical ou
   verify 16 / 32 full 560.3 / 853.9 -> 513.6 / 792.1 us (attn_fvws 138.7 / 263.7 us vs attn_fv 162.5 / 318.9).
   Other shapes run v24b code; their differences vs 55385a5e are noise (e.g. b32 sliding decode 221.8 -> 225.7 us).
 - Judge queue (Nov 4 ~12:45 AM ET): backlog ~1600, ~92 running on 152 GPUs; this check waited ~15 min, ran ~10 min.
+- Review r19 (#26) m1: about half of v25's gain over v24b in this check is a favourable draw. Swapping only the two
+  changed cells (verify 16 / 32 full) from cf28ddbf into v24b's 55385a5e profile and scoring with TASK.md's load weights
+  gives 1.4014, against 1.4090 observed. The other 0.0076 is unchanged-code cells (b32 sliding decode 1.145 -> 1.198, verify 16
+  sliding 1.328 -> 1.389). With a CI half-width of ~0.021, a fresh draw near 1.40 has a lower bound of ~1.38 < 1.385.
+- review r19 (#26) n3: the 32-token GEMM 1 config (8 warps, split 2, KS 2048, gated, MINB 4: 64-register cap) spills 12 B
+  stores / 16 B loads on NVRTC 12.9. Performance only; v24b measured it faster. Note this if the configs are swept again.
+
+### Nov 4 1:11 AM ET: decode v25 and attention v25e SUBMITTED (Senior Larper r19 approvals; from main f34a13b, shas verified)
+- **decode submit 49368d8c2c034751**, runs/v25_ws4_fv.py (sha256 6808c831...): **1.396x (95% CI 1.375-1.417), 13/13**.
+  The board went 1.364 -> 1.396. Per m1, the submit's own lower bound 1.375 does **not** clear the previous board's upper bound
+  1.385, so this is not a statistically proven improvement over v19 (point estimate +2.3%). The two changed cells kept their gain
+  (verify 16 / 32 full 523.2 / 804.9 us vs v24b's 560.3 / 853.9).
+- **attention submit 78433e53780b4edd**, runs/v25e_ws4.py (sha256 9b289e5b...): **1.589x (95% CI 1.565-1.620), 16/16**. Its lower
+  bound clears the previous board's upper bound 1.540. At 1:36 AM ET the public attention board still showed 1.517 (7e6f6a28); see
+  the re-check below.
+- Ranks (curl, ~1:35 AM ET): overall 976 -> **928 / 1951**; decode 909 -> 879 / 1252 (1.396); attention 905 / 1329 (still 1.517
+  shown); MoE 941 / 1385; bf16 1521 / 1696; prefill 741 / 859 (own board).
+- The decode submit's sends.tsv row commit is f34a13b. The attention row's commit is 51cee71, a records-only commit on top of
+  f34a13b (the decode row) made so the second send was also from a clean tree. The file bytes are identical to main's.
 
 ## Nov 3 ~11:15 PM - Nov 4 ET: attention v25e round (branch attn-v25): WS consumer-loop ablations; v25e_ws4 1.593x
 
