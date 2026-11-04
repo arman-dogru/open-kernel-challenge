@@ -62,7 +62,8 @@ attn_v25e_variants_nvrtc.py: shipped build cubin 1c894397, 80 regs, identical ou
   (verify 16 / 32 full 523.2 / 804.9 us vs v24b's 560.3 / 853.9).
 - **attention submit 78433e53780b4edd**, runs/v25e_ws4.py (sha256 9b289e5b...): **1.589x (95% CI 1.565-1.620), 16/16**. Its lower
   bound clears the previous board's upper bound 1.540. At 1:36 AM ET the public attention board still showed 1.517 (7e6f6a28); see
-  the re-check below.
+  the re-check below. **Re-check 2:27 AM ET: the attention board shows 1.5892 (job 78433e53780b4edd), rank 852 / 1331**
+  (was 905). Overall 931 / 1956 and decode 882 / 1254 (1.396) at the same time; both drifted a few places as others submit.
 - Ranks (curl, ~1:35 AM ET): overall 976 -> **928 / 1951**; decode 909 -> 879 / 1252 (1.396); attention 905 / 1329 (still 1.517
   shown); MoE 941 / 1385; bf16 1521 / 1696; prefill 741 / 859 (own board).
 - The decode submit's sends.tsv row commit is f34a13b. The attention row's commit is 51cee71, a records-only commit on top of
