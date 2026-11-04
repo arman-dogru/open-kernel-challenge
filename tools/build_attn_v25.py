@@ -136,7 +136,7 @@ head = ('''# okc: problem=muse_attention_decode
 """''' + name + ''': v24 + attention v25 source (tools/build_attn_v25.py): the full-verify kernel from tools/attn_v25_fv.cu
 (v24's + the "memory" clobber on the V transpose's inline ld/st.shared, review r17 m1; ST at compile time), FV ST
 ''' + str(cfg["fv_st"]) + ''', VT1 ''' + str(cfg["fv_vt1"]) + ''', FV splits/SM ''' + str(cfg["fv_occ"]) + ''', full decode batch >= 2 rows config ''' + str(tuple(cfg["rows"])) + '''.
-''' + ('''v25d (DIAGNOSTIC): kernel_fn is v24's; at import (GPU present) an untimed sweep of full verify (b 16/32) and full
+''' + (cfg.get("desc", "") + "\n" if cfg.get("desc") else "") + ('''v25d (DIAGNOSTIC): kernel_fn is v24's; at import (GPU present) an untimed sweep of full verify (b 16/32) and full
 decode (b 16/32) variants on synthetic agentic inputs (ctx 80000, page 1, scattered pages), CUDA graphs, cold L2.
 ''' if DIAG else "") + '''
 v24:''')
