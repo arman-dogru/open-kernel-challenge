@@ -114,6 +114,11 @@ time_et	kind	job_id	problem	file	sha256	git_commit	notes
 2026-11-02 10:20:20	check	fe141d068e594e14	muse_attention_decode	muse_attention_decode/runs/v22_cuda_fv.py	d2925cb84321faeac15c47620687cb9059559445fa92c72dffcfe616d5b89d60	6b2ef88	
 2026-11-02 10:42:36	check	f2fac59291494e89	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	99d1fef	
 2026-11-02 11:47:58	submit	1ca1c9271e304fd8	muse_attention_decode	muse_attention_decode/runs/v23_fv_addr.py	8347529bec86eed1f8f93c8e1077834828e928f3fc5ef3cc190a7bb2d8834cb6	1005d60	
+2026-11-02 14:18:26	check	7f0858a69e0b4492	muse_decode_layer	muse_decode_layer/runs/v23_fv_attn.py	01c431ab724fd10e4bba7a00113a9a9d66a3d4f46437a9ac7144d6dfee7b9b6a	8b51f37	
+2026-11-02 14:26:09	check	6567d26179874f80	muse_decode_layer	muse_decode_layer/runs/v23d_bench.py	6616b215681829f1cbed12526fceaa6aaf6dcbad82033630d7d9c4364fb381ad	f878322	
+2026-11-02 14:31:27	check	8bae0dfe527f4f01	muse_decode_layer	muse_decode_layer/runs/v24d_bench.py	bb9d7f907967c35833a4b3f363eaf23a54057f279bfd989175aed45678449273	08d0bdb	
+2026-11-02 14:38:05	check	a6f4e782a8fc4db3	muse_decode_layer	muse_decode_layer/runs/v24e_bench.py	db9d067fe39529518bf47f719e5349f54ed676415cd13b4fa811db3654c5745e	4024ae8	
+2026-11-02 14:42:08	check	55385a5e40244c4e	muse_decode_layer	muse_decode_layer/runs/v24b_moe_cfg.py	245756a3c0ef790828c2aa46798b20be824bd1a5b573f858e08a6e4a90a5f3bc	b21c52d	
 2026-11-02 14:48:49	check	a894ff98f9d14c19	muse_attention_decode	muse_attention_decode/runs/v24_rows_occ4.py	b60eca17974b936a73d6db5d3fe49e51c97ac54c704df2992f66a308b4a6e209	308faad	
 2026-11-02 16:24:27	check	7734ccf2d7c242c1	muse_attention_decode	muse_attention_decode/runs/v25d_bench.py	3b70ed3084e619ef5fc6329d308854dd18ce7ed0e9805256312a523b8ea510c4	60260d2	
 2026-11-02 16:33:47	check	3a109de22685401a	muse_attention_decode	muse_attention_decode/runs/v25d2_bench.py	df9ba5a5beb48dcad8fedf0a9350f8cb4eb801b903aea2646259e1fc08eea28d	1543c73	
