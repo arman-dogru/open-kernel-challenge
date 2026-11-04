@@ -1,0 +1,56 @@
+v23d diag: device NVIDIA H200 triton 3.8.0
+batch 16: K+V bytes 330.9 MB (floor at 4.8 TB/s 68.9 us)
+  probe gather nsplit 128 BN 64 w 4 st 3 pref 0: 128.9 us  2.57 TB/s
+  probe gather nsplit 128 BN 128 w 4 st 3 pref 0: 117.1 us  2.83 TB/s
+  probe gather nsplit 128 BN 128 w 4 st 4 pref 1: 109.0 us  3.04 TB/s
+  probe gather nsplit 128 BN 256 w 8 st 3 pref 0: 138.2 us  2.39 TB/s
+  probe gather nsplit 32 BN 128 w 4 st 4 pref 0: 110.1 us  3.01 TB/s
+  probe gather nsplit 32 BN 256 w 8 st 4 pref 1: 113.6 us  2.91 TB/s
+  probe contig nsplit 128 BN 128 w 4 st 3 pref 0: 91.6 us  3.61 TB/s
+  probe contig nsplit 32 BN 256 w 8 st 4 pref 0: 88.9 us  3.72 TB/s
+  rows BN 64 w 4 st 3 occ 16 (nsplit 128) hoist 1 pref 0: 148.8 us  2.22 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 3 occ 16 (nsplit 128) hoist 1 pref 1: 150.6 us  2.20 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 16 (nsplit 128) hoist 1 pref 1: 152.4 us  2.17 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 4 occ 16 (nsplit 128) hoist 1 pref 1: 155.0 us  2.13 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 4 occ 16 (nsplit 128) hoist 1 pref 1: 156.7 us  2.11 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 8 st 3 occ 16 (nsplit 128) hoist 1 pref 1: 244.3 us  1.35 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 8 (nsplit 64) hoist 1 pref 1: 153.4 us  2.16 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 3 occ 8 (nsplit 64) hoist 1 pref 1: 136.4 us  2.43 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 4 occ 8 (nsplit 64) hoist 1 pref 1: 141.7 us  2.34 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 32 (nsplit 256) hoist 1 pref 1: 172.3 us  1.92 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 3 occ 4 (nsplit 32) hoist 1 pref 1: 127.6 us  2.59 TB/s  rel.err vs first 0.0e+00
+  rows BN 256 w 8 st 3 occ 8 (nsplit 64) hoist 1 pref 1: 209.8 us  1.58 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 2 occ 16 (nsplit 128) hoist 1 pref 1: 142.8 us  2.32 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 5 occ 16 (nsplit 128) hoist 1 pref 1: 159.7 us  2.07 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 2 st 3 occ 16 (nsplit 128) hoist 1 pref 1: 138.0 us  2.40 TB/s  rel.err vs first 0.0e+00
+  rows BN 32 w 4 st 3 occ 16 (nsplit 128) hoist 1 pref 1: 156.2 us  2.12 TB/s  rel.err vs first 0.0e+00
+  rows BN 32 w 4 st 4 occ 32 (nsplit 256) hoist 1 pref 1: 164.6 us  2.01 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 8 st 4 occ 8 (nsplit 64) hoist 1 pref 1: 227.7 us  1.45 TB/s  rel.err vs first 0.0e+00
+batch 32: K+V bytes 649.1 MB (floor at 4.8 TB/s 135.2 us)
+  probe gather nsplit 64 BN 64 w 4 st 3 pref 0: 246.1 us  2.64 TB/s
+  probe gather nsplit 64 BN 128 w 4 st 3 pref 0: 212.3 us  3.06 TB/s
+  probe gather nsplit 64 BN 128 w 4 st 4 pref 1: 196.4 us  3.31 TB/s
+  probe gather nsplit 64 BN 256 w 8 st 3 pref 0: 258.7 us  2.51 TB/s
+  probe gather nsplit 16 BN 128 w 4 st 4 pref 0: 210.9 us  3.08 TB/s
+  probe gather nsplit 16 BN 256 w 8 st 4 pref 1: 200.4 us  3.24 TB/s
+  probe contig nsplit 64 BN 128 w 4 st 3 pref 0: 165.3 us  3.93 TB/s
+  probe contig nsplit 16 BN 256 w 8 st 4 pref 0: 163.3 us  3.97 TB/s
+  rows BN 64 w 4 st 3 occ 16 (nsplit 64) hoist 1 pref 0: 263.0 us  2.47 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 3 occ 16 (nsplit 64) hoist 1 pref 1: 246.9 us  2.63 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 16 (nsplit 64) hoist 1 pref 1: 265.7 us  2.44 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 4 occ 16 (nsplit 64) hoist 1 pref 1: 267.7 us  2.43 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 4 occ 16 (nsplit 64) hoist 1 pref 1: 253.7 us  2.56 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 8 st 3 occ 16 (nsplit 64) hoist 1 pref 1: 416.3 us  1.56 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 8 (nsplit 32) hoist 1 pref 1: 284.6 us  2.28 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 3 occ 8 (nsplit 32) hoist 1 pref 1: 239.8 us  2.71 TB/s  rel.err vs first 0.0e+00
+  rows BN 128 w 4 st 4 occ 8 (nsplit 32) hoist 1 pref 1: 244.7 us  2.65 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 3 occ 32 (nsplit 128) hoist 1 pref 1: 284.7 us  2.28 TB/s  rel.err vs first 3.1e-07
+  rows BN 128 w 4 st 3 occ 4 (nsplit 16) hoist 1 pref 1: 234.7 us  2.77 TB/s  rel.err vs first 5.8e-05
+  rows BN 256 w 8 st 3 occ 8 (nsplit 32) hoist 1 pref 1: 355.5 us  1.83 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 2 occ 16 (nsplit 64) hoist 1 pref 1: 251.7 us  2.58 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 4 st 5 occ 16 (nsplit 64) hoist 1 pref 1: 271.7 us  2.39 TB/s  rel.err vs first 0.0e+00
+  rows BN 64 w 2 st 3 occ 16 (nsplit 64) hoist 1 pref 1: 240.8 us  2.70 TB/s  rel.err vs first 0.0e+00
+  rows BN 32 w 4 st 3 occ 16 (nsplit 64) hoist 1 pref 1: 287.5 us  2.26 TB/s  rel.err vs first 0.0e+00
+  rows BN 32 w 4 st 4 occ 32 (nsplit 128) hoist 1 pref 1: 277.9 us  2.34 TB/s  rel.err vs first 3.1e-07
+  rows BN 128 w 8 st 4 occ 8 (nsplit 32) hoist 1 pref 1: 401.8 us  1.62 TB/s  rel.err vs first 0.0e+00
+v23d diag: done in 23 s

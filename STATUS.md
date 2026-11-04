@@ -22,6 +22,33 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 #4 attn-fused (r6 APPROVED): merge order #2 -> #3 -> #4, each retargeted to main, waiting on Arman. #5
 decode-v13-fused (base attn-fused): v13, for review.
 
+
+## Nov 4 ~1:00 AM ET: decode v25 (branch decode-v25), overall-board formula, leaderboard
+
+**Overall board = decode-step speedup, dominated by muse_decode_layer.** okc says the overall board "ranks by how much your
+best runs together would speed up a decode step" and the API gives ranks only. Fit on the Nov 4 12:35 AM ET boards
+(/api/v1/leaderboard[/<problem>], 1948 overall rows): for teams with a decode_layer row, ordering by decode_layer speedup
+alone reproduces the overall order with 125 adjacent inversions in 1250; teams with no decode_layer row are placed by a
+composite of bf16 / MoE / attention in which MoE carries most of the weight (rough fit: geometric weights ~0.02 / 0.59 / 0.02).
+The inversions are teams whose composite beats their decode_layer run, i.e. score ~ max(decode_layer, composite). Ours:
+decode 1.364x vs a composite of ~1.30-1.33x, so **only decode_layer (or a large MoE gain) moves our overall rank**;
+bf16 / attention gains move only their own boards. Estimated overall rank vs decode_layer speedup: 1.364 -> ~950-976,
+1.392 -> ~910, 1.409 -> ~895, 1.45 -> ~860, 1.50 -> ~830, 1.60 -> ~740.
+
+Ranks at 12:35 AM ET: overall 976 / 1948; attention 903 / 1329 (1.517), MoE 938 / 1382 (1.539), decode 909 / 1251
+(1.364), bf16 1518 / 1693 (1.115), prefill 741 / 858 (1.115, own board).
+
+decode v25 (tools/build_decode_v25.py -> muse_decode_layer/runs/v25_ws4_fv.py, sha256 6808c831...): v24b (check
+55385a5e, 1.392x) + full verify b >= 2 on attention v25e's warp-specialized attn_fvws (NPW 4 + setmaxnreg, 2 CTAs/SM,
+FV_OCC 3). The FV block is taken verbatim from runs/v25e_ws4.py (decode's FV block was byte-identical to attention v24's);
+"memory" clobbers on all inline ld/st.shared. Offline: tools/tests/decode_v25_fv_glue.py PASS (sources == tools/attn_v25_fv.cu /
+attn_v25_ws.cu == v25e's, flags/smem equal, block 384, dispatch, 4 kv_scale / page cases within bounds);
+attn_v25e_variants_nvrtc.py: shipped build cubin 1c894397, 80 regs, identical output for the decode and attention files.
+- **Check cf28ddbfd37d408d: 1.409x (95% CI 1.388-1.430), 13/13.** Board 1.364 (CI upper 1.385): lower bound clears by 0.003.
+  verify 16 / 32 full 560.3 / 853.9 -> 513.6 / 792.1 us (attn_fvws 138.7 / 263.7 us vs attn_fv 162.5 / 318.9).
+  Other shapes run v24b code; their differences vs 55385a5e are noise (e.g. b32 sliding decode 221.8 -> 225.7 us).
+- Judge queue (Nov 4 ~12:45 AM ET): backlog ~1600, ~92 running on 152 GPUs; this check waited ~15 min, ran ~10 min.
+
 ## Nov 3 ~11:15 PM - Nov 4 ET: attention v25e round (branch attn-v25): WS consumer-loop ablations; v25e_ws4 1.593x
 
 Board: attention v24 submitted at 1.517x (7e6f6a28c30b4688; its check a894ff98 1.535x, CI 1.512-1.558). Not submitted
@@ -944,6 +971,11 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-02 10:20:20 | fe141d068e594e14 | muse_attention_decode | check | v22_cuda_fv.py | d2925cb84321faea | 6b2ef88 | 1.430x (1.409-1.456), passed=True |  |
 | 2026-11-02 10:42:36 | f2fac59291494e89 | muse_attention_decode | check | v23_fv_addr.py | 8347529bec86eed1 | 99d1fef | 1.486x (1.464-1.508), passed=True |  |
 | 2026-11-02 11:47:58 | 1ca1c9271e304fd8 | muse_attention_decode | submit | v23_fv_addr.py | 8347529bec86eed1 | 1005d60 | 1.478x (1.456-1.500), passed=True |  |
+| 2026-11-02 14:18:26 | 7f0858a69e0b4492 | muse_decode_layer | check | v23_fv_attn.py | 01c431ab724fd10e | 8b51f37 | 1.376x (1.355-1.397), passed=True |  |
+| 2026-11-02 14:26:09 | 6567d26179874f80 | muse_decode_layer | check | v23d_bench.py | 6616b215681829f1 | f878322 | 1.378x (1.357-1.399), passed=True |  |
+| 2026-11-02 14:31:27 | 8bae0dfe527f4f01 | muse_decode_layer | check | v24d_bench.py | bb9d7f907967c358 | 08d0bdb | 1.380x (1.359-1.401), passed=True |  |
+| 2026-11-02 14:38:05 | a6f4e782a8fc4db3 | muse_decode_layer | check | v24e_bench.py | db9d067fe3952951 | 4024ae8 | 1.385x (1.364-1.406), passed=True |  |
+| 2026-11-02 14:42:08 | 55385a5e40244c4e | muse_decode_layer | check | v24b_moe_cfg.py | 245756a3c0ef7908 | b21c52d | 1.392x (1.371-1.413), passed=True |  |
 | 2026-11-02 14:48:49 | a894ff98f9d14c19 | muse_attention_decode | check | v24_rows_occ4.py | b60eca17974b936a | 308faad | 1.535x (1.512-1.558), passed=True |  |
 | 2026-11-02 16:24:27 | 7734ccf2d7c242c1 | muse_attention_decode | check | v25d_bench.py | 3b70ed3084e619ef | 60260d2 | 1.529x (1.506-1.560), passed=True |  |
 | 2026-11-02 16:33:47 | 3a109de22685401a | muse_attention_decode | check | v25d2_bench.py | df9ba5a5beb48dca | 1543c73 | 1.533x (1.510-1.564), passed=True |  |
@@ -956,3 +988,4 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-02 18:00:22 | ec7c393618114a7a | muse_attention_decode | check | v25d8_bench.py | 364f48015a694e59 | b0e7eab | 1.522x (1.500-1.545), passed=True |  |
 | 2026-11-03 23:19:17 | 5ff307988ce14518 | muse_attention_decode | check | v25e1_bench.py | e418a9d252b23ff5 | 75654dc | 1.530x (1.507-1.553), passed=True |  |
 | 2026-11-03 23:38:55 | 71c0267525f7412e | muse_attention_decode | check | v25e_ws4.py | 9b289e5b57a58105 | 6b1ee7c | 1.593x (1.569-1.616), passed=True |  |
+| 2026-11-04 00:40:46 | cf28ddbfd37d408d | muse_decode_layer | check | v25_ws4_fv.py | 6808c83193888e3e | a3e52e8 | 1.409x (1.388-1.430), passed=True |  |
