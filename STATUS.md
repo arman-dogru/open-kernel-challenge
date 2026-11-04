@@ -944,6 +944,11 @@ was sent after the edit, so it matches the committed bytes. From c89f5f5 on, eve
 | 2026-11-02 10:20:20 | fe141d068e594e14 | muse_attention_decode | check | v22_cuda_fv.py | d2925cb84321faea | 6b2ef88 | 1.430x (1.409-1.456), passed=True |  |
 | 2026-11-02 10:42:36 | f2fac59291494e89 | muse_attention_decode | check | v23_fv_addr.py | 8347529bec86eed1 | 99d1fef | 1.486x (1.464-1.508), passed=True |  |
 | 2026-11-02 11:47:58 | 1ca1c9271e304fd8 | muse_attention_decode | submit | v23_fv_addr.py | 8347529bec86eed1 | 1005d60 | 1.478x (1.456-1.500), passed=True |  |
+| 2026-11-02 14:18:26 | 7f0858a69e0b4492 | muse_decode_layer | check | v23_fv_attn.py | 01c431ab724fd10e | 8b51f37 | 1.376x (1.355-1.397), passed=True |  |
+| 2026-11-02 14:26:09 | 6567d26179874f80 | muse_decode_layer | check | v23d_bench.py | 6616b215681829f1 | f878322 | 1.378x (1.357-1.399), passed=True |  |
+| 2026-11-02 14:31:27 | 8bae0dfe527f4f01 | muse_decode_layer | check | v24d_bench.py | bb9d7f907967c358 | 08d0bdb | 1.380x (1.359-1.401), passed=True |  |
+| 2026-11-02 14:38:05 | a6f4e782a8fc4db3 | muse_decode_layer | check | v24e_bench.py | db9d067fe3952951 | 4024ae8 | 1.385x (1.364-1.406), passed=True |  |
+| 2026-11-02 14:42:08 | 55385a5e40244c4e | muse_decode_layer | check | v24b_moe_cfg.py | 245756a3c0ef7908 | b21c52d | 1.392x (1.371-1.413), passed=True |  |
 | 2026-11-02 14:48:49 | a894ff98f9d14c19 | muse_attention_decode | check | v24_rows_occ4.py | b60eca17974b936a | 308faad | 1.535x (1.512-1.558), passed=True |  |
 | 2026-11-02 16:24:27 | 7734ccf2d7c242c1 | muse_attention_decode | check | v25d_bench.py | 3b70ed3084e619ef | 60260d2 | 1.529x (1.506-1.560), passed=True |  |
 | 2026-11-02 16:33:47 | 3a109de22685401a | muse_attention_decode | check | v25d2_bench.py | df9ba5a5beb48dca | 1543c73 | 1.533x (1.510-1.564), passed=True |  |
