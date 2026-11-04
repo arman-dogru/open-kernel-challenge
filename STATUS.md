@@ -25,6 +25,40 @@ decode-v13-fused (base attn-fused): v13, for review.
 
 
 
+
+## Nov 4 ~3:00 AM ET: MoE long shot (Larper option b), LUT / prmt 4-bit unpack: DEFINITIVE NULL before any judge check
+
+Brief: a LUT / prmt-based E2M1 unpack in moe_mma, bit-identical to v26e / v25, no FP16-MMA change, local tests before
+any check, time-box 6 PM ET. Stopped at the design / SASS stage, because the LUT cannot use fewer instructions than
+the current unpack. No kernel file built, no check sent.
+
+SASS of v25's moe_mma (tools/tests/moe_sass_dump.py + cuobjdump; NVRTC 12.9, sm_90a, FASTSCALE 1), opcode counts:
+- GEMM 2 at 128 / 256 tokens (16 warps, KS 1024, NB 2; 16 tiles x 4 k-steps = 64 steps): SHF 289, LOP3 329,
+  HMUL2 256, PRMT 128, LDS 256, LEA 155, IMAD 88, HMMA 128. So each k-step has 4 SHF + ~5 LOP3 (unpack),
+  4 HMUL2 (block scale), 2 PRMT (scale splat), 4 LDS + ~2.4 LEA (B fragments) and 2 HMMA: ~23 instructions.
+- GEMM 1 (gated, 8 warps, KS 1024, PF 3, NB 2): SHF 557, LOP3 670, HMUL2 512, PRMT 256, LDS 257, LEA 313, HMMA 256.
+- The unpack is ~2.25 ALU ops per bf16x2 register (SHF + LOP3; a3 is LOP3 + SHF + LOP3). The HMUL2 is the block-scale
+  multiply that the bit-identical rule keeps (bf16(code) x bf16(scale), the same rounding).
+
+Why a prmt LUT can't beat it (bit-identical constraint):
+- The unpack writes code s e1 e0 m to bf16 bits [15] = s, [8:7] = e1 e0, [6] = m, i.e. hi byte = s000000e1 and
+  lo byte = e0 m 000000 (x2 per register). prmt picks bytes, not bits, so each code needs 2 output bytes.
+- A pool of 8 bytes can hold the 4 lo patterns plus the 2 hi patterns, but the selectors need (e0, m) = code & 3
+  and 4 | e1 as separate nibbles. Building that selector word from the packed codes needs >= 1-2 SHF / LOP3.
+- prmt's selector msb is "replicate the selected byte's sign" (result 0x00 / 0xFF), so the code's sign bit can't select.
+  It has to be masked off before prmt and ORed into bit 15 afterwards (1 more LOP3).
+- Per register: >= selector build (1-2) + prmt (1) + sign (1) = 3-4 ops vs today's ~2.25. Storing the codes
+  pre-duplicated as selectors would double the weight bytes (decode 32 MoE is already near bandwidth).
+- With the HMUL2 kept, and nothing in the MMA operands changeable, there is no LUT form with fewer issue slots.
+  Null.
+
+Outside the approved approach (noted, NOT started):
+- A different prepare-time code permutation could put one register's 8 bits in place (a = wq & 0x81C081C0, no SHF).
+  That gives 3 SHF + 4 LOP3 instead of 4 + 5 per k-step, ~2 of ~23 instructions (~9%), bit-identical.
+- The B-fragment address math (155 LEA + 256 LDS in GEMM 2) is the other visible overhead, but v26's ldmatrix
+  (b4aba533, 1.372x) did not help.
+- An upper-bound estimate of ~4-6% MoE / ~1.5-2.5% decode would not clear a 1.417 lower bound twice.
+
 ## Nov 4 ~2:45 AM ET: decode v26p projection diag (branch decode-v26): no projection lever with the current kernels
 
 tools/build_decode_v26p.py -> runs/v26p_bench.py (kernel_fn = v25; untimed in-prepare sweep, cold L2, median of 15,
