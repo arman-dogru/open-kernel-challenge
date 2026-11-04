@@ -23,6 +23,40 @@ PRs: #1 (audit-r2-fixes) merged at e4aacf1 (r3). #2 moe-cuda-mma (r4 APPROVED), 
 decode-v13-fused (base attn-fused): v13, for review.
 
 
+
+## Nov 4 ~4:30 PM ET: PLAN-final-night Phase A, E1 gate FAILED: the push stops (Larper condition 2), v25 stays final
+
+Nothing built, no check, no submit, no Kaggle. E2 / E4 / E3 / the v27 stack were not built: per condition 2, if E1 fails
+the whole push stops, with no v25+E2+E4 stack.
+
+E1's premise was wrong. The Nov 4 3:00 AM ET note (branch decode-v26; PLAN-final-night E1) said "a code permutation
+puts one register's 8 bits in place, 3 SHF + 4 LOP3 instead of 4 + 5". That does not exist:
+- The bf16 fields each unpacked register needs are T = {6, 7, 8, 15, 22, 23, 24, 31} (sign 15/31, exponent 8,7 / 24,23,
+  mantissa 6/22, i.e. 0x81C081C0).
+- An in-place register uses T itself. The other three would need source sets T - r for three rotations, and together the four
+  sets must tile the 32 bits. T is 16-periodic (A = {6, 7, 8, 15} twice), and no 4 translates of A tile Z16.
+- That is why v25 has the mixed a3 = (wq & 0x81808180) | (rotl(wq, 24) & 0x00400040).
+
+Exhaustive search (tools/tests/e1_unpack_cost_search.py, ~4 min). Cost model: SHF per distinct nonzero rotation plus one
+LOP3 per masked piece (a 2-mask merge needs 2 LOP3s, since bits outside T must be zeroed):
+- No single-word rotate + mask scheme of any bit permutation costs <= 8 ops per k-step.
+- Cases covered: 3 single-piece regs + one 2-piece reg with <= 3 nonzero rotations; 2 single + 2 two-piece with <= 2;
+  fewer single regs can't cover 32 bits; 4 single-piece regs is the impossible tiling.
+- v25's 4 SHF + 5 LOP3 = 9 is the minimum.
+- tools/tests/e1_unpack_tiling_2word.py: with funnel shifts across the two words of a k-step pair, there is still no
+  all-single-piece tiling of 64 bits (exact cover: none).
+- The most a 2-word scheme could save is <= 1 op per 2 k-steps (~2% of the inner loop, < 1% decode), inside the noise.
+  Not pursued.
+
+SASS "before" (v25's moe_mma, tools/tests/moe_sass_dump.py, NVRTC 12.9 sm_90a, FASTSCALE 1):
+- GEMM 2 (16 warps, KS 1024, NB 2, 64 k-steps): SHF 289, LOP3 329, HMUL2 256, PRMT 128, LDS 256, HMMA 128.
+- GEMM 1 (gated, 8 warps, KS 1024, PF 3, NB 2): SHF 557, LOP3 670, HMUL2 512.
+- That is 4.5 / 5.1 per k-step (GEMM 2) and 4.4 / 5.2 per k-step (GEMM 1, 128 k-steps).
+- There is no "after" count: no permutation exists that lowers them, so no E1 build was made.
+- Gate result: SHF / LOP3 per k-step cannot go down. **E1 out; push stopped; decode v25 (49368d8c, 1.396x) is final.**
+
+The bit-identical NumPy emulation was not run: there is no E1 permutation to emulate.
+
 ## Nov 4 ~1:00 AM ET: decode v25 (branch decode-v25), overall-board formula, leaderboard
 
 **Overall board = decode-step speedup, dominated by muse_decode_layer.** okc says the overall board "ranks by how much your
