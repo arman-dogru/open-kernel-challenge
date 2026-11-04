@@ -24,7 +24,7 @@ decode-v13-fused (base attn-fused): v13, for review.
 
 
 
-## Nov 4 ~4:30 PM ET: PLAN-final-night Phase A, E1 gate FAILED: the push stops (Larper condition 2), v25 stays final
+## Nov 4 ~3:50 PM ET: PLAN-final-night Phase A, E1 gate FAILED: the push stops (Larper condition 2), v25 stays final
 
 Nothing built, no check, no submit, no Kaggle. E2 / E4 / E3 / the v27 stack were not built: per condition 2, if E1 fails
 the whole push stops, with no v25+E2+E4 stack.
